@@ -3,5 +3,9 @@
   "description": "Site estático; composer.json presente apenas para compatibilidade com deploy que exige composer.lock.",
   "type": "project",
   "license": "proprietary",
-  "require": {}
+  "require": {},
+  "scripts": {
+    "post-install-cmd": "@php scripts/post-install-reset-lock.php",
+    "post-update-cmd": "@php scripts/post-install-reset-lock.php"
+  }
 }
