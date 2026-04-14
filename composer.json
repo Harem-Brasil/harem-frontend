@@ -1,0 +1,7 @@
+{
+  "name": "harem-brasil/harem-frontend",
+  "description": "Site estático; composer.json presente apenas para compatibilidade com deploy que exige composer.lock.",
+  "type": "project",
+  "license": "proprietary",
+  "require": {}
+}
