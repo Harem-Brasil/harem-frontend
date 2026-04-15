@@ -94,6 +94,15 @@ func (s *Server) handleCreateSubscription(w http.ResponseWriter, r *http.Request
 
 	subID := uuid.New().String()
 
+	_, err = s.db.Exec(r.Context(),
+		`INSERT INTO subscriptions (id, user_id, plan_id, status) VALUES ($1, $2, $3, 'pending_payment')`,
+		subID, user.UserID, plan.ID,
+	)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Database error")
+		return
+	}
+
 	respondCreated(w, Subscription{
 		ID:     subID,
 		UserID: user.UserID,
@@ -111,6 +120,7 @@ func (s *Server) handleGetMySubscription(w http.ResponseWriter, r *http.Request)
 	}
 
 	var sub Subscription
+	sub.Plan = &Plan{}
 	err := s.db.QueryRow(r.Context(),
 		`SELECT s.id, s.user_id, s.plan_id, s.status, s.created_at,
 		        p.id, p.name, p.slug, p.description, p.price, p.currency, p.interval, p.features, p.is_active

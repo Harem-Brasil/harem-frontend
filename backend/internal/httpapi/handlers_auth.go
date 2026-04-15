@@ -2,12 +2,14 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -76,13 +78,31 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if err != nil {
-		respondError(w, http.StatusConflict, "User already exists")
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			// Unique constraint violation
+			respondError(w, http.StatusConflict, "User already exists")
+			return
+		}
+		// Other database error
+		respondError(w, http.StatusInternalServerError, "Database error")
 		return
 	}
 
 	accessToken, refreshToken, expiresAt, err := s.generateTokens(userID, req.Email, req.Username, []string{"user"})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to generate tokens")
+		return
+	}
+
+	// Persist refresh token in sessions table
+	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
+	_, err = s.db.Exec(r.Context(),
+		`INSERT INTO sessions (id, user_id, refresh_token, expires_at) VALUES ($1, $2, $3, $4)`,
+		uuid.New().String(), userID, refreshToken, refreshExpiry,
+	)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to create session")
 		return
 	}
 
@@ -145,6 +165,17 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	accessToken, refreshToken, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "Failed to generate tokens")
+		return
+	}
+
+	// Persist refresh token in sessions table
+	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
+	_, err = s.db.Exec(r.Context(),
+		`INSERT INTO sessions (id, user_id, refresh_token, expires_at) VALUES ($1, $2, $3, $4)`,
+		uuid.New().String(), user.ID, refreshToken, refreshExpiry,
+	)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "Failed to create session")
 		return
 	}
 

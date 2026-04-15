@@ -128,6 +128,10 @@ func (s *Server) handleCreatePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Visibility == "" {
+		req.Visibility = "public"
+	}
+
 	if req.Content == "" && len(req.MediaURLs) == 0 {
 		respondValidationError(w, map[string]string{
 			"content": "Content or media required",

@@ -14,8 +14,8 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 	limit := 20
 
 	rows, err := s.db.Query(r.Context(),
-		`SELECT id, username, email, role, created_at FROM users 
-		 WHERE deleted_at IS NULL AND ($1 = '' OR id > $1) 
+		`SELECT id, username, email, role, created_at FROM users
+		 WHERE deleted_at IS NULL AND ($1 = '' OR created_at < $1)
 		 ORDER BY created_at DESC LIMIT $2`,
 		cursor, limit+1,
 	)
@@ -138,7 +138,7 @@ func (s *Server) handleAdminAuditLog(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := s.db.Query(r.Context(),
 		`SELECT id, user_id, action, resource, details, ip_address, created_at FROM audit_log
-		 WHERE ($1 = '' OR id > $1)
+		 WHERE ($1 = '' OR created_at < $1)
 		 ORDER BY created_at DESC LIMIT $2`,
 		cursor, limit+1,
 	)
