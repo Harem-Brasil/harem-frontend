@@ -168,8 +168,8 @@ SERVICEFILE
   sudo systemctl enable ${SERVICE_NAME}
   sudo systemctl restart ${SERVICE_NAME}
   sudo systemctl status ${SERVICE_NAME} --no-pager
-"'''
-        }
+"
+          '''
       }
     }
   }
