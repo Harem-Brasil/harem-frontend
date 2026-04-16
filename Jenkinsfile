@@ -88,7 +88,7 @@ pipeline {
             export REDIS_URL="${REDIS_URL}"
             export JWT_SECRET="${JWT_SECRET}"
             export STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY}"
-            ../artifacts/harem-api-linux-amd64 migrate
+            ../artifacts/harem-api-linux-amd64 migrate -dir ./migrations
           '''
         }
       }
@@ -114,6 +114,7 @@ EOF
 # Upload arquivos para /tmp no target
 scp "$BIN_LOCAL" ${TARGET_HOST}:/tmp/harem-api
 scp /tmp/harem-api.env ${TARGET_HOST}:/tmp/harem-api.env
+scp -r backend/migrations ${TARGET_HOST}:/tmp/migrations
 
 # Limpar arquivo local temporário
 rm -f /tmp/harem-api.env
@@ -132,6 +133,12 @@ ssh ${TARGET_HOST} "
   # Mover arquivo de ambiente
   sudo mv /tmp/harem-api.env ${TARGET_DIR}/.env
   sudo chmod 0600 ${TARGET_DIR}/.env
+
+  # Mover diretório de migrações
+  sudo rm -rf ${TARGET_DIR}/migrations
+  sudo mv /tmp/migrations ${TARGET_DIR}/migrations
+  sudo chmod -R 0755 ${TARGET_DIR}/migrations
+
   sudo chown -R grimlock:grimlock ${TARGET_DIR}
 "
 
