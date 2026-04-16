@@ -102,30 +102,37 @@ pipeline {
 set -euo pipefail
 BIN_LOCAL="artifacts/harem-api-linux-amd64"
 
-# Upload binary to /tmp on target
-scp "$BIN_LOCAL" ${TARGET_HOST}:/tmp/harem-api
-
-# Prepare target and install
-ssh ${TARGET_HOST} "
-  set -euo pipefail
-
-  # Criar diretórios
-  sudo mkdir -p ${TARGET_DIR} ${TARGET_DIR}/logs
-
-  # Mover binário
-  sudo mv /tmp/harem-api ${TARGET_DIR}/harem-api
-  sudo chmod 0755 ${TARGET_DIR}/harem-api
-
-  # Criar arquivo de ambiente
-  sudo tee ${TARGET_DIR}/.env > /dev/null << 'ENVFILE'
+# Criar arquivo .env localmente (segurança: não expor segredos na linha de comando)
+cat > /tmp/harem-api.env << 'EOF'
 PORT=8080
 DATABASE_URL=${DATABASE_URL}
 REDIS_URL=${REDIS_URL}
 JWT_SECRET=${JWT_SECRET}
 STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
-ENVFILE
+EOF
 
-  sudo chown -R root:root ${TARGET_DIR}
+# Upload arquivos para /tmp no target
+scp "$BIN_LOCAL" ${TARGET_HOST}:/tmp/harem-api
+scp /tmp/harem-api.env ${TARGET_HOST}:/tmp/harem-api.env
+
+# Limpar arquivo local temporário
+rm -f /tmp/harem-api.env
+
+# Prepare target and install
+ssh ${TARGET_HOST} "
+  set -euo pipefail
+
+  # Criar diretório
+  sudo mkdir -p ${TARGET_DIR}
+
+  # Mover binário
+  sudo mv /tmp/harem-api ${TARGET_DIR}/harem-api
+  sudo chmod 0755 ${TARGET_DIR}/harem-api
+
+  # Mover arquivo de ambiente
+  sudo mv /tmp/harem-api.env ${TARGET_DIR}/.env
+  sudo chmod 0600 ${TARGET_DIR}/.env
+  sudo chown -R grimlock:grimlock ${TARGET_DIR}
 "
 
 # Criar/Atualizar serviço systemd
@@ -139,14 +146,14 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=grimlock
 WorkingDirectory=${TARGET_DIR}
 EnvironmentFile=${TARGET_DIR}/.env
 ExecStart=${TARGET_DIR}/harem-api serve
 Restart=always
 RestartSec=5
-StandardOutput=append:${TARGET_DIR}/logs/output.log
-StandardError=append:${TARGET_DIR}/logs/error.log
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
