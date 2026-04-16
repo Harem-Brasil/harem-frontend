@@ -294,6 +294,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		RefreshToken string `json:"refresh_token"`
 	}
 	if err := json.Unmarshal(body, &req); err == nil && req.RefreshToken != "" {
+		// Revoke the session in the database
 		_, _ = s.db.Exec(r.Context(),
 			`UPDATE sessions SET revoked_at = NOW() WHERE refresh_token = $1`,
 			req.RefreshToken,
