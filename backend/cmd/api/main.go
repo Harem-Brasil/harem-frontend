@@ -8,10 +8,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/harem-brasil/backend/internal/httpapi"
+	"github.com/harem-brasil/backend/internal/application"
 	"github.com/harem-brasil/backend/internal/migrate"
 	"github.com/joho/godotenv"
 )
@@ -66,12 +67,22 @@ func runServe(logger *slog.Logger, dbURL string) {
 		slog.Warn("using default JWT secret - set JWT_SECRET env var in production")
 	}
 
-	server, err := httpapi.New(httpapi.Config{
-		Port:      *port,
-		DBURL:     dbURL,
-		RedisURL:  *redisURL,
-		JWTSecret: *jwtSecret,
-		Logger:    logger,
+	corsOrigins := parseCommaSeparatedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
+
+	initCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	server, err := application.NewHTTPServer(initCtx, application.Config{
+		Port:                     *port,
+		DBURL:                    dbURL,
+		RedisURL:                 *redisURL,
+		JWTSecret:                *jwtSecret,
+		Logger:                   logger,
+		CORSAllowedOrigins:       corsOrigins,
+		StripeWebhookSecret:      getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		PagSeguroWebhookSecret:   getEnv("PAGSEGURO_WEBHOOK_SECRET", ""),
+		MercadoPagoWebhookSecret: getEnv("MERCADOPAGO_WEBHOOK_SECRET", ""),
+		AppEnv:                   getEnv("ENV", ""),
 	})
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
@@ -139,4 +150,21 @@ func getEnv(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+// parseCommaSeparatedOrigins divide CORS_ALLOWED_ORIGINS (vírgulas).
+// Valores vazios são ignorados. Lista vazia faz o servidor usar DefaultCORSAllowedOrigins.
+func parseCommaSeparatedOrigins(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
