@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 
 	"github.com/harem-brasil/backend/internal/domain"
 )
@@ -17,7 +16,7 @@ var validWebhookProviders = map[string]bool{
 	"mercadopago": true,
 }
 
-func validateWebhookSignature(provider string, body []byte, sigHeader, stripeSig string) bool {
+func (s *Services) validateWebhookSignature(provider string, body []byte, sigHeader, stripeSig string) bool {
 	sig := sigHeader
 	if sig == "" {
 		sig = stripeSig
@@ -29,17 +28,17 @@ func validateWebhookSignature(provider string, body []byte, sigHeader, stripeSig
 	var secretKey string
 	switch provider {
 	case "stripe":
-		secretKey = os.Getenv("STRIPE_WEBHOOK_SECRET")
+		secretKey = s.StripeWebhookSecret
 	case "pagseguro":
-		secretKey = os.Getenv("PAGSEGURO_WEBHOOK_SECRET")
+		secretKey = s.PagSeguroWebhookSecret
 	case "mercadopago":
-		secretKey = os.Getenv("MERCADOPAGO_WEBHOOK_SECRET")
+		secretKey = s.MercadoPagoWebhookSecret
 	default:
 		return false
 	}
 
 	if secretKey == "" {
-		if os.Getenv("ENV") == "development" || os.Getenv("ENV") == "test" {
+		if s.AppEnv == "development" || s.AppEnv == "test" {
 			return true
 		}
 		return false
@@ -53,7 +52,7 @@ func validateWebhookSignature(provider string, body []byte, sigHeader, stripeSig
 }
 
 func (s *Services) WebhookStripe(ctx context.Context, body []byte, sigHeader, stripeSig string) error {
-	if !validateWebhookSignature("stripe", body, sigHeader, stripeSig) {
+	if !s.validateWebhookSignature("stripe", body, sigHeader, stripeSig) {
 		return domain.Err(401, "Invalid webhook signature")
 	}
 
@@ -66,7 +65,7 @@ func (s *Services) WebhookStripe(ctx context.Context, body []byte, sigHeader, st
 }
 
 func (s *Services) WebhookPagSeguro(ctx context.Context, body []byte, sigHeader string) error {
-	if !validateWebhookSignature("pagseguro", body, sigHeader, "") {
+	if !s.validateWebhookSignature("pagseguro", body, sigHeader, "") {
 		return domain.Err(401, "Invalid webhook signature")
 	}
 
@@ -79,7 +78,7 @@ func (s *Services) WebhookPagSeguro(ctx context.Context, body []byte, sigHeader 
 }
 
 func (s *Services) WebhookMercadoPago(ctx context.Context, body []byte, sigHeader string) error {
-	if !validateWebhookSignature("mercadopago", body, sigHeader, "") {
+	if !s.validateWebhookSignature("mercadopago", body, sigHeader, "") {
 		return domain.Err(401, "Invalid webhook signature")
 	}
 
@@ -96,7 +95,7 @@ func (s *Services) WebhookGeneric(ctx context.Context, provider string, body []b
 		return nil, domain.Err(404, "Unknown webhook provider")
 	}
 
-	if !validateWebhookSignature(provider, body, sigHeader, "") {
+	if !s.validateWebhookSignature(provider, body, sigHeader, "") {
 		return nil, domain.Err(401, "Invalid webhook signature")
 	}
 

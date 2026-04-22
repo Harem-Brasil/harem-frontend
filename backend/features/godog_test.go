@@ -111,6 +111,7 @@ func theAPIIsRunning() error {
 		RedisURL:  os.Getenv("REDIS_URL"),
 		JWTSecret: "test-jwt-secret-that-is-long-enough-for-tests-32chars",
 		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AppEnv:    "test",
 	}
 	if cfg.DBURL == "" {
 		cfg.DBURL = "postgres://harem:harem@localhost:5432/harem?sslmode=disable"
@@ -119,7 +120,7 @@ func theAPIIsRunning() error {
 		cfg.RedisURL = "redis://localhost:6379/0"
 	}
 
-	srv, err := application.NewHTTPServer(cfg)
+	srv, err := application.NewHTTPServer(context.Background(), cfg)
 	if err != nil {
 		// Skip tests when DB/Redis is not available - return pending
 		return godog.ErrPending

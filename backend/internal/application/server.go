@@ -21,9 +21,8 @@ type HTTPServer struct {
 }
 
 // NewHTTPServer monta pool Postgres, Redis, serviços e router Gin (composition root).
-func NewHTTPServer(cfg Config) (*HTTPServer, error) {
-	ctx := context.Background()
-
+// ctx governa timeouts e cancelamento durante a inicialização (Postgres e Redis).
+func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 	db, err := datasources.NewPostgresPool(ctx, cfg.DBURL)
 	if err != nil {
 		return nil, err
@@ -37,17 +36,27 @@ func NewHTTPServer(cfg Config) (*HTTPServer, error) {
 	rdb := redis.NewClient(opt)
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
+		_ = rdb.Close()
 		db.Close()
 		return nil, err
 	}
 
 	svc := services.New(services.Dependencies{
-		DB:          db,
-		Redis:       rdb,
-		JWTSecret:   []byte(cfg.JWTSecret),
-		Logger:      cfg.Logger,
-		MaxFileSize: cfg.MaxFileSize,
+		DB:                       db,
+		Redis:                    rdb,
+		JWTSecret:                []byte(cfg.JWTSecret),
+		Logger:                   cfg.Logger,
+		MaxFileSize:              cfg.MaxFileSize,
+		StripeWebhookSecret:      cfg.StripeWebhookSecret,
+		PagSeguroWebhookSecret:   cfg.PagSeguroWebhookSecret,
+		MercadoPagoWebhookSecret: cfg.MercadoPagoWebhookSecret,
+		AppEnv:                   cfg.AppEnv,
 	})
+
+	corsOrigins := cfg.CORSAllowedOrigins
+	if len(corsOrigins) == 0 {
+		corsOrigins = DefaultCORSAllowedOrigins
+	}
 
 	gin.SetMode(gin.ReleaseMode)
 	engine := gin.New()
@@ -55,7 +64,7 @@ func NewHTTPServer(cfg Config) (*HTTPServer, error) {
 	engine.Use(httpmw.RequestID())
 	engine.Use(httpmw.RequestLogger(cfg.Logger))
 	engine.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		AllowOrigins:     corsOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "X-Request-Id", "Idempotency-Key", "If-Match"},
 		ExposeHeaders:    []string{"RateLimit-Limit", "RateLimit-Remaining", "RateLimit-Reset", "Retry-After"},

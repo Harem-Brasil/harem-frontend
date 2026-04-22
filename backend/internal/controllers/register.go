@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 
@@ -98,7 +100,13 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 		})
 		authPublic.POST("/auth/logout", func(c *gin.Context) {
 			var req services.LogoutBody
-			_ = c.ShouldBindJSON(&req)
+			if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
+				if logger != nil {
+					logger.Warn("invalid JSON on logout", "path", c.FullPath())
+				}
+				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+				return
+			}
 			if err := svc.Logout(c.Request.Context(), req); err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
@@ -129,18 +137,23 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				utils.HandleServiceError(c, logger, err)
 				return
 			}
+			c.Status(http.StatusOK)
 		})
 		authPublic.POST("/auth/password/forgot", func(c *gin.Context) {
 			if err := svc.PasswordForgot(c.Request.Context()); err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
 			}
+			utils.RespondJSON(c, http.StatusAccepted, gin.H{
+				"message": "If an account exists for this email, you will receive instructions.",
+			})
 		})
 		authPublic.POST("/auth/password/reset", func(c *gin.Context) {
 			if err := svc.PasswordReset(c.Request.Context()); err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
 			}
+			c.Status(http.StatusOK)
 		})
 	}
 

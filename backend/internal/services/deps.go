@@ -14,4 +14,10 @@ type Dependencies struct {
 	JWTSecret   []byte
 	Logger      *slog.Logger
 	MaxFileSize int64
+
+	StripeWebhookSecret      string
+	PagSeguroWebhookSecret   string
+	MercadoPagoWebhookSecret string
+	// AppEnv replica ENV (ex.: development, test, production); usado quando o segredo do webhook está vazio.
+	AppEnv string
 }

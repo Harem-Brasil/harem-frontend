@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+
+	"github.com/harem-brasil/backend/internal/utils"
 )
 
 // GinRateLimit por IP cliente (Redis). Gin expõe ClientIP() com suporte a proxies configurados.
@@ -33,18 +35,13 @@ func GinRateLimit(redis *redis.Client, logger *slog.Logger) gin.HandlerFunc {
 
 				if count > limit {
 					c.Header("Retry-After", "60")
-					c.Header("Content-Type", "application/problem+json; charset=utf-8")
 					if logger != nil {
 						logger.Warn("rate limit exceeded",
 							"client_ip", clientIP,
 							"request_id", GetRequestID(c),
 						)
 					}
-					c.JSON(http.StatusTooManyRequests, gin.H{
-						"title":  "Too Many Requests",
-						"status": 429,
-						"detail": "Too many requests",
-					})
+					utils.RespondProblem(c, http.StatusTooManyRequests, "Too Many Requests", "Too many requests")
 					c.Abort()
 					return
 				}
