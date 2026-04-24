@@ -30,14 +30,12 @@ func ginRateLimitWithConfig(rdb *redis.Client, logger *slog.Logger, keyPrefix st
 		key := fmt.Sprintf("%s:%s", keyPrefix, clientIP)
 
 		if rdb != nil {
-			pipe := rdb.Pipeline()
-			incr := pipe.Incr(ctx, key)
-			pipe.ExpireNX(ctx, key, window)
-			_, err := pipe.Exec(ctx)
+			count, err := rdb.Incr(ctx, key).Result()
+			if err == nil && count == 1 {
+				rdb.Expire(ctx, key, window)
+			}
 
 			if err == nil {
-				count := incr.Val()
-
 				c.Header("RateLimit-Limit", strconv.FormatInt(limit, 10))
 				c.Header("RateLimit-Remaining", strconv.FormatInt(max(0, limit-count), 10))
 

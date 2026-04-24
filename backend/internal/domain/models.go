@@ -4,6 +4,7 @@ import (
 	"net/mail"
 	"time"
 	"unicode"
+	"unicode/utf8"
 )
 
 // --- Auth / usuário ---
@@ -65,14 +66,14 @@ func (req *LoginRequest) Validate() (map[string]string, bool) {
 }
 
 func validateScreenName(name string) string {
-	if len(name) < 2 {
+	if utf8.RuneCountInString(name) < 2 {
 		return "Screen name must be at least 2 characters long"
 	}
-	if len(name) > 64 {
+	if utf8.RuneCountInString(name) > 64 {
 		return "Screen name must be at most 64 characters long"
 	}
 	for _, r := range name {
-		if r < 32 || r == 127 {
+		if !unicode.IsPrint(r) {
 			return "Screen name contains invalid characters"
 		}
 	}
@@ -80,7 +81,7 @@ func validateScreenName(name string) string {
 }
 
 func validatePassword(password string) string {
-	if len(password) < 8 {
+	if utf8.RuneCountInString(password) < 8 {
 		return "Password must be at least 8 characters long"
 	}
 	var hasLower, hasUpper, hasDigit, hasSpecial bool
