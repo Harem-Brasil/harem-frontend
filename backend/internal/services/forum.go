@@ -41,7 +41,7 @@ func (s *Services) ListForumTopics(ctx context.Context, categoryID, cursor strin
 		rows, err = s.DB.Query(ctx,
 			`SELECT t.id, t.category_id, t.author_id, t.title, t.slug, t.reply_count, t.view_count,
 			        t.is_pinned, t.is_locked, t.last_reply_at, t.created_at,
-			        u.id, u.username, u.role, u.avatar_url
+			        u.id, u.screen_name, u.role, u.avatar_url
 			 FROM forum_topics t
 			 JOIN users u ON t.author_id = u.id
 			 WHERE t.category_id = $1 AND t.deleted_at IS NULL
@@ -52,7 +52,7 @@ func (s *Services) ListForumTopics(ctx context.Context, categoryID, cursor strin
 		rows, err = s.DB.Query(ctx,
 			`SELECT t.id, t.category_id, t.author_id, t.title, t.slug, t.reply_count, t.view_count,
 			        t.is_pinned, t.is_locked, t.last_reply_at, t.created_at,
-			        u.id, u.username, u.role, u.avatar_url
+			        u.id, u.screen_name, u.role, u.avatar_url
 			 FROM forum_topics t
 			 JOIN users u ON t.author_id = u.id
 			 WHERE t.deleted_at IS NULL
@@ -157,7 +157,7 @@ func (s *Services) GetForumTopic(ctx context.Context, id string) (*domain.ForumT
 	err := s.DB.QueryRow(ctx,
 		`SELECT t.id, t.category_id, t.author_id, t.title, t.slug, t.reply_count, t.view_count,
 		        t.is_pinned, t.is_locked, t.last_reply_at, t.created_at,
-		        u.id, u.username, u.role, u.avatar_url
+		        u.id, u.screen_name, u.role, u.avatar_url
 		 FROM forum_topics t
 		 JOIN users u ON t.author_id = u.id
 		 WHERE t.id = $1 AND t.deleted_at IS NULL`,

@@ -58,7 +58,7 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest, met
 	now := time.Now().UTC()
 
 	_, err = s.DB.Exec(ctx,
-		`INSERT INTO users (id, email, username, password_hash, role, accept_terms_version, created_at, updated_at) 
+		`INSERT INTO users (id, email, screen_name, password_hash, role, accept_terms_version, created_at, updated_at) 
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
 		userID, req.Email, req.ScreenName, string(hashedPassword), "user", req.AcceptTermsVersion, now,
 	)
@@ -122,7 +122,7 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 
 	var user struct {
 		ID           string
-		Username     string
+		ScreenName   string
 		Email        string
 		PasswordHash string
 		Role         string
@@ -130,9 +130,9 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 	}
 
 	err := s.DB.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, role, created_at FROM users WHERE email = $1 AND deleted_at IS NULL`,
+		`SELECT id, screen_name, email, password_hash, role, created_at FROM users WHERE email = $1 AND deleted_at IS NULL`,
 		req.Email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.CreatedAt)
+	).Scan(&user.ID, &user.ScreenName, &user.Email, &user.PasswordHash, &user.Role, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -151,7 +151,7 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 		return nil, domain.Err(401, "Invalid credentials")
 	}
 
-	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
+	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.ScreenName, []string{user.Role})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
@@ -186,7 +186,7 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 		ExpiresAt:        expiresAt,
 		User: domain.UserPublic{
 			ID:         user.ID,
-			ScreenName: user.Username,
+			ScreenName: user.ScreenName,
 			Email:      user.Email,
 			Role:       user.Role,
 			CreatedAt:  utils.FormatRFC3339UTC(user.CreatedAt),
@@ -243,21 +243,21 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMe
 	}
 
 	var user struct {
-		ID       string
-		Email    string
-		Username string
-		Role     string
+		ID         string
+		Email      string
+		ScreenName string
+		Role       string
 	}
 	err = s.DB.QueryRow(ctx,
-		`SELECT id, email, username, role FROM users WHERE id = $1 AND deleted_at IS NULL`,
+		`SELECT id, email, screen_name, role FROM users WHERE id = $1 AND deleted_at IS NULL`,
 		session.UserID,
-	).Scan(&user.ID, &user.Email, &user.Username, &user.Role)
+	).Scan(&user.ID, &user.Email, &user.ScreenName, &user.Role)
 
 	if err != nil {
 		return nil, domain.Err(500, "User not found")
 	}
 
-	accessToken, refreshToken, newTokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
+	accessToken, refreshToken, newTokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.ScreenName, []string{user.Role})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
@@ -310,7 +310,7 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMe
 		User: domain.UserPublic{
 			ID:         user.ID,
 			Email:      user.Email,
-			ScreenName: user.Username,
+			ScreenName: user.ScreenName,
 			Role:       user.Role,
 		},
 	}, nil

@@ -93,7 +93,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a resposta deve conter erro de validação para "([^"]*)"$`, theResponseShouldContainValidationErrorFor)
 	ctx.Step(`^a resposta deve indicar que o post foi curtido$`, theResponseShouldIndicatePostIsLiked)
 	ctx.Step(`^a resposta deve indicar que o post foi descurtido$`, theResponseShouldIndicatePostIsUnliked)
-	ctx.Step(`^cada usuário nos resultados deve ter username contendo "([^"]*)"$`, eachUserInResultsShouldHaveUsernameContaining)
+	ctx.Step(`^cada usuário nos resultados deve ter screen_name contendo "([^"]*)"$`, eachUserInResultsShouldHaveScreenNameContaining)
 	ctx.Step(`^cada post deve ter "([^"]*)" com valor "([^"]*)"$`, eachPostShouldHaveWithValue)
 	ctx.Step(`^cada post deve ter "([^"]*)" como "([^"]*)" ou de criadores subscritos$`, eachPostShouldHaveVisibilityAsOrFromSubscribedCreators)
 	ctx.Step(`^a resposta deve conter posts do criador "([^"]*)"$`, theResponseShouldContainPostsFromCreator)
@@ -401,7 +401,7 @@ func theResponseShouldIndicatePostIsUnliked() error {
 	return theResponseShouldContain("unliked")
 }
 
-func eachUserInResultsShouldHaveUsernameContaining(substring string) error {
+func eachUserInResultsShouldHaveScreenNameContaining(substring string) error {
 	return nil
 }
 

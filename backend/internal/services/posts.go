@@ -15,7 +15,7 @@ func (s *Services) ListPosts(ctx context.Context, cursor string) (*domain.Cursor
 
 	rows, err := s.DB.Query(ctx,
 		`SELECT p.id, p.author_id, p.content, p.media_urls, p.visibility, p.like_count, p.created_at, p.updated_at,
-		        u.id, u.username, u.role, u.avatar_url
+		        u.id, u.screen_name, u.role, u.avatar_url
 		 FROM posts p
 		 JOIN users u ON p.author_id = u.id
 		 WHERE p.deleted_at IS NULL AND p.visibility = 'public'
@@ -60,7 +60,7 @@ func (s *Services) GetPost(ctx context.Context, id string) (*domain.PostResponse
 
 	err := s.DB.QueryRow(ctx,
 		`SELECT p.id, p.author_id, p.content, p.media_urls, p.visibility, p.like_count, p.created_at, p.updated_at,
-		        u.id, u.username, u.role, u.avatar_url
+		        u.id, u.screen_name, u.role, u.avatar_url
 		 FROM posts p
 		 JOIN users u ON p.author_id = u.id
 		 WHERE p.id = $1 AND p.deleted_at IS NULL`,
@@ -181,7 +181,7 @@ func (s *Services) ListComments(ctx context.Context, postID, cursor string) (*do
 
 	rows, err := s.DB.Query(ctx,
 		`SELECT c.id, c.post_id, c.author_id, c.content, c.created_at,
-		        u.id, u.username, u.role, u.avatar_url
+		        u.id, u.screen_name, u.role, u.avatar_url
 		 FROM post_comments c
 		 JOIN users u ON c.author_id = u.id
 		 WHERE c.post_id = $1 AND c.deleted_at IS NULL
@@ -252,7 +252,7 @@ func (s *Services) FeedHome(ctx context.Context, user *middleware.UserClaims, cu
 
 	rows, err := s.DB.Query(ctx,
 		`SELECT p.id, p.author_id, p.content, p.media_urls, p.visibility, p.like_count, p.created_at, p.updated_at,
-		        u.id, u.username, u.role, u.avatar_url
+		        u.id, u.screen_name, u.role, u.avatar_url
 		 FROM posts p
 		 JOIN users u ON p.author_id = u.id
 		 WHERE p.deleted_at IS NULL 
