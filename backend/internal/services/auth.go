@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/harem-brasil/backend/internal/domain"
+	"github.com/harem-brasil/backend/internal/middleware"
 	"github.com/harem-brasil/backend/internal/utils"
 )
 
@@ -42,15 +43,25 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest) (*d
 		return nil, domain.Err(500, "Database error")
 	}
 
-	accessToken, refreshToken, expiresAt, err := s.generateTokens(userID, req.Email, req.Username, []string{"user"})
+	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(userID, req.Email, req.Username, []string{"user"})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
 
+	_, secret, ok := splitRefreshToken(refreshToken)
+	if !ok {
+		return nil, domain.Err(500, "Failed to process refresh token")
+	}
+
+	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, domain.Err(500, "Failed to hash refresh token")
+	}
+
 	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
 	_, err = s.DB.Exec(ctx,
-		`INSERT INTO sessions (id, user_id, refresh_token, expires_at) VALUES ($1, $2, $3, $4)`,
-		uuid.New().String(), userID, refreshToken, refreshExpiry,
+		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New().String(), userID, tokenID, string(tokenHash), refreshExpiry,
 	)
 	if err != nil {
 		return nil, domain.Err(500, "Failed to create session")
@@ -102,15 +113,25 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest) (*domain.
 		return nil, domain.Err(401, "Invalid credentials")
 	}
 
-	accessToken, refreshToken, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
+	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
 
+	_, secret, ok := splitRefreshToken(refreshToken)
+	if !ok {
+		return nil, domain.Err(500, "Failed to process refresh token")
+	}
+
+	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, domain.Err(500, "Failed to hash refresh token")
+	}
+
 	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
 	_, err = s.DB.Exec(ctx,
-		`INSERT INTO sessions (id, user_id, refresh_token, expires_at) VALUES ($1, $2, $3, $4)`,
-		uuid.New().String(), user.ID, refreshToken, refreshExpiry,
+		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New().String(), user.ID, tokenID, string(tokenHash), refreshExpiry,
 	)
 	if err != nil {
 		return nil, domain.Err(500, "Failed to create session")
@@ -140,14 +161,22 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody) (map[string]any
 		return nil, domain.ErrValidation("refresh_token required", map[string]string{"refresh_token": "Required"})
 	}
 
+	tokenID, secret, ok := splitRefreshToken(req.RefreshToken)
+	if !ok {
+		return nil, domain.Err(401, "Invalid refresh token format")
+	}
+
 	var session struct {
+		ID        string
 		UserID    string
+		TokenHash string
 		ExpiresAt time.Time
+		RevokedAt *time.Time
 	}
 	err := s.DB.QueryRow(ctx,
-		`SELECT user_id, expires_at FROM sessions WHERE refresh_token = $1 AND revoked_at IS NULL`,
-		req.RefreshToken,
-	).Scan(&session.UserID, &session.ExpiresAt)
+		`SELECT id, user_id, token_hash, expires_at, revoked_at FROM refresh_tokens WHERE token_id = $1`,
+		tokenID,
+	).Scan(&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.RevokedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -156,8 +185,16 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody) (map[string]any
 		return nil, domain.Err(500, "Database error")
 	}
 
+	if session.RevokedAt != nil {
+		return nil, domain.Err(401, "Refresh token revoked")
+	}
+
 	if time.Now().UTC().After(session.ExpiresAt) {
 		return nil, domain.Err(401, "Refresh token expired")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(session.TokenHash), []byte(secret)); err != nil {
+		return nil, domain.Err(401, "Invalid refresh token")
 	}
 
 	var user struct {
@@ -175,26 +212,32 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody) (map[string]any
 		return nil, domain.Err(500, "User not found")
 	}
 
-	accessToken, refreshToken, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
+	accessToken, refreshToken, newTokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
 
+	_, newSecret, ok := splitRefreshToken(refreshToken)
+	if !ok {
+		return nil, domain.Err(500, "Failed to process refresh token")
+	}
+
+	newTokenHash, err := bcrypt.GenerateFromPassword([]byte(newSecret), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, domain.Err(500, "Failed to hash refresh token")
+	}
+
 	if _, err := s.DB.Exec(ctx,
-		`UPDATE sessions SET revoked_at = NOW() WHERE refresh_token = $1`,
-		req.RefreshToken,
+		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1`,
+		session.ID,
 	); err != nil {
-		tokenHint := req.RefreshToken
-		if len(tokenHint) > 8 {
-			tokenHint = tokenHint[:8] + "..."
-		}
-		s.Logger.Error("failed to revoke old refresh token", "error", err, "refresh_token", tokenHint)
+		s.Logger.Error("failed to revoke old refresh token", "error", err, "token_id", tokenID)
 	}
 
 	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
 	_, err = s.DB.Exec(ctx,
-		`INSERT INTO sessions (id, user_id, refresh_token, expires_at) VALUES ($1, $2, $3, $4)`,
-		uuid.New().String(), user.ID, refreshToken, refreshExpiry,
+		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		uuid.New().String(), user.ID, newTokenID, string(newTokenHash), refreshExpiry,
 	)
 	if err != nil {
 		return nil, domain.Err(500, "Failed to create session")
@@ -214,16 +257,26 @@ type LogoutBody struct {
 
 func (s *Services) Logout(ctx context.Context, req LogoutBody) error {
 	if req.RefreshToken != "" {
-		_, _ = s.DB.Exec(ctx,
-			`UPDATE sessions SET revoked_at = NOW() WHERE refresh_token = $1`,
-			req.RefreshToken,
-		)
+		tokenID, _, ok := splitRefreshToken(req.RefreshToken)
+		if ok {
+			_, _ = s.DB.Exec(ctx,
+				`UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_id = $1 AND revoked_at IS NULL`,
+				tokenID,
+			)
+		}
 	}
 	return nil
 }
 
-func (s *Services) LogoutAll(ctx context.Context) error {
-	return domain.Err(501, "Logout all sessions not yet implemented")
+func (s *Services) LogoutAll(ctx context.Context, user *middleware.UserClaims) error {
+	if user == nil {
+		return domain.Err(401, "Unauthorized")
+	}
+	_, err := s.DB.Exec(ctx,
+		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
+		user.UserID,
+	)
+	return err
 }
 
 func (s *Services) OAuthAuthorize(ctx context.Context, provider string) error {

@@ -117,13 +117,6 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 			}
 			c.Status(http.StatusNoContent)
 		})
-		authPublic.POST("/auth/logout-all", func(c *gin.Context) {
-			if err := svc.LogoutAll(c.Request.Context()); err != nil {
-				utils.HandleServiceError(c, logger, err)
-				return
-			}
-			c.Status(http.StatusNoContent)
-		})
 		authPublic.GET("/auth/oauth/:provider/authorize", func(c *gin.Context) {
 			if err := svc.OAuthAuthorize(c.Request.Context(), c.Param("provider")); err != nil {
 				utils.HandleServiceError(c, logger, err)
@@ -158,6 +151,20 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				return
 			}
 			c.Status(http.StatusOK)
+		})
+	}
+
+	authAuthed := v1.Group("")
+	authAuthed.Use(httpmw.MaxBodySize(1 << 20))
+	authAuthed.Use(httpmw.GinAuth(jwtSecret, []string{"user", "creator", "moderator", "admin"}, logger))
+	{
+		authAuthed.POST("/auth/logout-all", func(c *gin.Context) {
+			u := httpmw.MustUserClaims(c)
+			if err := svc.LogoutAll(c.Request.Context(), u); err != nil {
+				utils.HandleServiceError(c, logger, err)
+				return
+			}
+			c.Status(http.StatusNoContent)
 		})
 	}
 
