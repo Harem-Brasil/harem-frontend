@@ -32,18 +32,20 @@ func (s *Services) generateTokens(userID, email, username string, roles []string
 	}
 
 	tokenID = uuid.New().String()
-	secret := generateSecureSecret()
+	secret, err := generateSecureSecret()
+	if err != nil {
+		return "", "", "", time.Time{}, err
+	}
 	refreshToken = tokenID + "." + secret
 	return accessToken, refreshToken, tokenID, expiresAt, nil
 }
 
-func generateSecureSecret() string {
+func generateSecureSecret() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback to less secure but still functional; in practice rand.Read never fails
-		return uuid.New().String() + uuid.New().String()
+		return "", err
 	}
-	return base64.RawURLEncoding.EncodeToString(b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func splitRefreshToken(refreshToken string) (tokenID, secret string, ok bool) {

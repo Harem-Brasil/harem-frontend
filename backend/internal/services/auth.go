@@ -15,7 +15,33 @@ import (
 	"github.com/harem-brasil/backend/internal/utils"
 )
 
-func (s *Services) Register(ctx context.Context, req domain.RegisterRequest) (*domain.AuthResponse, error) {
+// execer abstracts pgxpool.Pool and pgx.Tx so storeRefreshToken works with either.
+type execer interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+// SessionMeta carries HTTP request metadata for refresh token auditing.
+type SessionMeta struct {
+	IP        string
+	UserAgent string
+}
+
+// storeRefreshToken hashes the secret with bcrypt and inserts a row into refresh_tokens.
+func (s *Services) storeRefreshToken(ctx context.Context, exec execer, userID, tokenID, secret string, meta *SessionMeta) error {
+	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
+	_, err = exec.Exec(ctx,
+		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at, last_used_at, ip_address, user_agent)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		uuid.New().String(), userID, tokenID, string(tokenHash), refreshExpiry, time.Now().UTC(), meta.IP, meta.UserAgent,
+	)
+	return err
+}
+
+func (s *Services) Register(ctx context.Context, req domain.RegisterRequest, meta *SessionMeta) (*domain.AuthResponse, error) {
 	fieldErrors, ok := req.Validate()
 	if !ok {
 		return nil, domain.ErrValidation("One or more fields failed validation", fieldErrors)
@@ -53,17 +79,7 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest) (*d
 		return nil, domain.Err(500, "Failed to process refresh token")
 	}
 
-	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, domain.Err(500, "Failed to hash refresh token")
-	}
-
-	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
-	_, err = s.DB.Exec(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-		uuid.New().String(), userID, tokenID, string(tokenHash), refreshExpiry,
-	)
-	if err != nil {
+	if err := s.storeRefreshToken(ctx, s.DB, userID, tokenID, secret, meta); err != nil {
 		return nil, domain.Err(500, "Failed to create session")
 	}
 
@@ -82,7 +98,7 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest) (*d
 	}, nil
 }
 
-func (s *Services) Login(ctx context.Context, req domain.LoginRequest) (*domain.AuthResponse, error) {
+func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *SessionMeta) (*domain.AuthResponse, error) {
 	fieldErrors, ok := req.Validate()
 	if !ok {
 		return nil, domain.ErrValidation("One or more fields failed validation", fieldErrors)
@@ -123,17 +139,7 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest) (*domain.
 		return nil, domain.Err(500, "Failed to process refresh token")
 	}
 
-	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, domain.Err(500, "Failed to hash refresh token")
-	}
-
-	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
-	_, err = s.DB.Exec(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-		uuid.New().String(), user.ID, tokenID, string(tokenHash), refreshExpiry,
-	)
-	if err != nil {
+	if err := s.storeRefreshToken(ctx, s.DB, user.ID, tokenID, secret, meta); err != nil {
 		return nil, domain.Err(500, "Failed to create session")
 	}
 
@@ -156,7 +162,7 @@ type RefreshBody struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-func (s *Services) Refresh(ctx context.Context, req RefreshBody) (map[string]any, error) {
+func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMeta) (map[string]any, error) {
 	if req.RefreshToken == "" {
 		return nil, domain.ErrValidation("refresh_token required", map[string]string{"refresh_token": "Required"})
 	}
@@ -222,25 +228,27 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody) (map[string]any
 		return nil, domain.Err(500, "Failed to process refresh token")
 	}
 
-	newTokenHash, err := bcrypt.GenerateFromPassword([]byte(newSecret), bcrypt.DefaultCost)
+	// Atomic rotation: revoke old token + insert new token in a single transaction.
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
-		return nil, domain.Err(500, "Failed to hash refresh token")
+		return nil, domain.Err(500, "Database error")
 	}
+	defer tx.Rollback(ctx)
 
-	if _, err := s.DB.Exec(ctx,
-		`UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = $1`,
+	_, err = tx.Exec(ctx,
+		`UPDATE refresh_tokens SET last_used_at = NOW(), revoked_at = NOW() WHERE id = $1`,
 		session.ID,
-	); err != nil {
-		s.Logger.Error("failed to revoke old refresh token", "error", err, "token_id", tokenID)
-	}
-
-	refreshExpiry := time.Now().UTC().Add(7 * 24 * time.Hour)
-	_, err = s.DB.Exec(ctx,
-		`INSERT INTO refresh_tokens (id, user_id, token_id, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`,
-		uuid.New().String(), user.ID, newTokenID, string(newTokenHash), refreshExpiry,
 	)
 	if err != nil {
+		return nil, domain.Err(500, "Failed to revoke old refresh token")
+	}
+
+	if err := s.storeRefreshToken(ctx, tx, user.ID, newTokenID, newSecret, meta); err != nil {
 		return nil, domain.Err(500, "Failed to create session")
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, domain.Err(500, "Failed to commit transaction")
 	}
 
 	return map[string]any{

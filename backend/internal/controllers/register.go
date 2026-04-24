@@ -69,7 +69,11 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
 				return
 			}
-			resp, err := svc.Register(c.Request.Context(), req)
+			meta := &services.SessionMeta{
+				IP:        c.ClientIP(),
+				UserAgent: c.GetHeader("User-Agent"),
+			}
+			resp, err := svc.Register(c.Request.Context(), req, meta)
 			if err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
@@ -82,7 +86,11 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
 				return
 			}
-			resp, err := svc.Login(c.Request.Context(), req)
+			meta := &services.SessionMeta{
+				IP:        c.ClientIP(),
+				UserAgent: c.GetHeader("User-Agent"),
+			}
+			resp, err := svc.Login(c.Request.Context(), req, meta)
 			if err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
@@ -95,7 +103,11 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
 				return
 			}
-			resp, err := svc.Refresh(c.Request.Context(), req)
+			meta := &services.SessionMeta{
+				IP:        c.ClientIP(),
+				UserAgent: c.GetHeader("User-Agent"),
+			}
+			resp, err := svc.Refresh(c.Request.Context(), req, meta)
 			if err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
