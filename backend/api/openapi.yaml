@@ -134,6 +134,7 @@ components:
           format: password
           minLength: 8
           maxLength: 128
+          pattern: "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[\\p{P}\\p{S}]).{8,}$"
           description: Senha do usuário (mínimo 8 caracteres, 1 maiúscula, 1 minúscula, 1 dígito, 1 especial)
         accept_terms_version:
           type: string
