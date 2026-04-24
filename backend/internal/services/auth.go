@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"net/mail"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,10 +16,20 @@ import (
 )
 
 func (s *Services) Register(ctx context.Context, req domain.RegisterRequest) (*domain.AuthResponse, error) {
-	if req.Email == "" || req.Username == "" || req.Password == "" {
-		return nil, domain.ErrValidation("One or more fields failed validation", map[string]string{
-			"fields": "email, username, and password are required",
-		})
+	validationErrors := make(map[string]string)
+	if req.Email == "" {
+		validationErrors["email"] = "Email is required"
+	} else if _, err := mail.ParseAddress(req.Email); err != nil {
+		validationErrors["email"] = "Invalid email format"
+	}
+	if req.Username == "" {
+		validationErrors["username"] = "Username is required"
+	}
+	if req.Password == "" {
+		validationErrors["password"] = "Password is required"
+	}
+	if len(validationErrors) > 0 {
+		return nil, domain.ErrValidation("One or more fields failed validation", validationErrors)
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -73,6 +84,19 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest) (*d
 }
 
 func (s *Services) Login(ctx context.Context, req domain.LoginRequest) (*domain.AuthResponse, error) {
+	validationErrors := make(map[string]string)
+	if req.Email == "" {
+		validationErrors["email"] = "Email is required"
+	} else if _, err := mail.ParseAddress(req.Email); err != nil {
+		validationErrors["email"] = "Invalid email format"
+	}
+	if req.Password == "" {
+		validationErrors["password"] = "Password is required"
+	}
+	if len(validationErrors) > 0 {
+		return nil, domain.ErrValidation("One or more fields failed validation", validationErrors)
+	}
+
 	var user struct {
 		ID           string
 		Username     string
