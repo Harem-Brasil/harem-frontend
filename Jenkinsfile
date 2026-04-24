@@ -22,7 +22,7 @@ pipeline {
     REDIS_URL       = credentials('harem-brasil-redis-url')
     JWT_SECRET      = credentials('harem-brasil-jwt-secret')
     STRIPE_SECRET_KEY = credentials('harem-brasil-stripe-secret-key')
-    CLOUDFLARE_API_TOKEN = credentials('cloudflare-api-token')
+    CLOUDFLARE_API_TOKEN = credentials('truvis-co-cloudflare-api-token')
     API_URL         = credentials('harem-brasil-api-url')
   }
 
