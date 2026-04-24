@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"time"
 
@@ -15,7 +17,11 @@ import (
 	"github.com/harem-brasil/backend/internal/utils"
 )
 
-const refreshTokenExpiry = 7 * 24 * time.Hour
+const (
+	refreshTokenExpiry = 7 * 24 * time.Hour
+	accessTokenExpiry  = 15 * time.Minute
+	bcryptCost         = 12
+)
 
 // execer abstracts pgxpool.Pool and pgx.Tx so storeRefreshToken works with either.
 type execer interface {
@@ -45,7 +51,7 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest, met
 		return nil, domain.ErrValidation("One or more fields failed validation", fieldErrors)
 	}
 
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
 	if err != nil {
 		return nil, domain.Err(500, "Failed to process password")
 	}
@@ -54,9 +60,9 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest, met
 	now := time.Now().UTC()
 
 	_, err = s.DB.Exec(ctx,
-		`INSERT INTO users (id, email, username, password_hash, role, created_at, updated_at) 
-		 VALUES ($1, $2, $3, $4, $5, $6, $6)`,
-		userID, req.Email, req.Username, string(hashedPassword), "user", now,
+		`INSERT INTO users (id, email, screen_name, password_hash, role, accept_terms_version, created_at, updated_at) 
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $7)`,
+		userID, req.Email, req.ScreenName, string(hashedPassword), "user", req.AcceptTermsVersion, now,
 	)
 
 	if err != nil {
@@ -67,7 +73,7 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest, met
 		return nil, domain.Err(500, "Database error")
 	}
 
-	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(userID, req.Email, req.Username, []string{"user"})
+	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(userID, req.Email, req.ScreenName, []string{"user"})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
@@ -77,26 +83,32 @@ func (s *Services) Register(ctx context.Context, req domain.RegisterRequest, met
 		return nil, domain.Err(500, "Failed to process refresh token")
 	}
 
-	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, domain.Err(500, "Failed to hash refresh token")
-	}
+	tokenHash := sha256Hash(secret)
 
-	if err := s.storeRefreshToken(ctx, s.DB, userID, tokenID, string(tokenHash), meta); err != nil {
+	if err := s.storeRefreshToken(ctx, s.DB, userID, tokenID, tokenHash, meta); err != nil {
 		return nil, domain.Err(500, "Failed to create session")
 	}
 
+	if s.Logger != nil {
+		s.Logger.Info("auth register success",
+			"user_id", userID,
+			"role", "user",
+		)
+	}
+
 	return &domain.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresAt:    expiresAt,
+		AccessToken:      accessToken,
+		AccessExpiresIn:  int64(accessTokenExpiry.Seconds()),
+		RefreshToken:     refreshToken,
+		RefreshExpiresIn: int64(refreshTokenExpiry.Seconds()),
+		TokenType:        "Bearer",
+		ExpiresAt:        expiresAt,
 		User: domain.UserPublic{
-			ID:        userID,
-			Username:  req.Username,
-			Email:     req.Email,
-			Role:      "user",
-			CreatedAt: utils.FormatRFC3339UTC(now),
+			ID:         userID,
+			ScreenName: req.ScreenName,
+			Email:      req.Email,
+			Role:       "user",
+			CreatedAt:  utils.FormatRFC3339UTC(now),
 		},
 	}, nil
 }
@@ -109,7 +121,7 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 
 	var user struct {
 		ID           string
-		Username     string
+		ScreenName   string
 		Email        string
 		PasswordHash string
 		Role         string
@@ -117,9 +129,9 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 	}
 
 	err := s.DB.QueryRow(ctx,
-		`SELECT id, username, email, password_hash, role, created_at FROM users WHERE email = $1 AND deleted_at IS NULL`,
+		`SELECT id, screen_name, email, password_hash, role, created_at FROM users WHERE email = $1 AND deleted_at IS NULL`,
 		req.Email,
-	).Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash, &user.Role, &user.CreatedAt)
+	).Scan(&user.ID, &user.ScreenName, &user.Email, &user.PasswordHash, &user.Role, &user.CreatedAt)
 
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -129,10 +141,16 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		if s.Logger != nil {
+			s.Logger.Warn("auth login failure",
+				"reason", "invalid_credentials",
+				"user_id", user.ID,
+			)
+		}
 		return nil, domain.Err(401, "Invalid credentials")
 	}
 
-	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
+	accessToken, refreshToken, tokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.ScreenName, []string{user.Role})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
@@ -142,26 +160,32 @@ func (s *Services) Login(ctx context.Context, req domain.LoginRequest, meta *Ses
 		return nil, domain.Err(500, "Failed to process refresh token")
 	}
 
-	tokenHash, err := bcrypt.GenerateFromPassword([]byte(secret), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, domain.Err(500, "Failed to hash refresh token")
-	}
+	tokenHash := sha256Hash(secret)
 
-	if err := s.storeRefreshToken(ctx, s.DB, user.ID, tokenID, string(tokenHash), meta); err != nil {
+	if err := s.storeRefreshToken(ctx, s.DB, user.ID, tokenID, tokenHash, meta); err != nil {
 		return nil, domain.Err(500, "Failed to create session")
 	}
 
+	if s.Logger != nil {
+		s.Logger.Info("auth login success",
+			"user_id", user.ID,
+			"role", user.Role,
+		)
+	}
+
 	return &domain.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresAt:    expiresAt,
+		AccessToken:      accessToken,
+		AccessExpiresIn:  int64(accessTokenExpiry.Seconds()),
+		RefreshToken:     refreshToken,
+		RefreshExpiresIn: int64(refreshTokenExpiry.Seconds()),
+		TokenType:        "Bearer",
+		ExpiresAt:        expiresAt,
 		User: domain.UserPublic{
-			ID:        user.ID,
-			Username:  user.Username,
-			Email:     user.Email,
-			Role:      user.Role,
-			CreatedAt: utils.FormatRFC3339UTC(user.CreatedAt),
+			ID:         user.ID,
+			ScreenName: user.ScreenName,
+			Email:      user.Email,
+			Role:       user.Role,
+			CreatedAt:  utils.FormatRFC3339UTC(user.CreatedAt),
 		},
 	}, nil
 }
@@ -210,26 +234,26 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMe
 		return nil, domain.Err(401, "Refresh token expired")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(session.TokenHash), []byte(secret)); err != nil {
+	if sha256Hash(secret) != session.TokenHash {
 		return nil, domain.Err(401, "Invalid refresh token")
 	}
 
 	var user struct {
-		ID       string
-		Email    string
-		Username string
-		Role     string
+		ID         string
+		Email      string
+		ScreenName string
+		Role       string
 	}
 	err = s.DB.QueryRow(ctx,
-		`SELECT id, email, username, role FROM users WHERE id = $1 AND deleted_at IS NULL`,
+		`SELECT id, email, screen_name, role FROM users WHERE id = $1 AND deleted_at IS NULL`,
 		session.UserID,
-	).Scan(&user.ID, &user.Email, &user.Username, &user.Role)
+	).Scan(&user.ID, &user.Email, &user.ScreenName, &user.Role)
 
 	if err != nil {
 		return nil, domain.Err(500, "User not found")
 	}
 
-	accessToken, refreshToken, newTokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.Username, []string{user.Role})
+	accessToken, refreshToken, newTokenID, expiresAt, err := s.generateTokens(user.ID, user.Email, user.ScreenName, []string{user.Role})
 	if err != nil {
 		return nil, domain.Err(500, "Failed to generate tokens")
 	}
@@ -239,11 +263,8 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMe
 		return nil, domain.Err(500, "Failed to process refresh token")
 	}
 
-	// Compute bcrypt hash BEFORE opening transaction to avoid holding DB locks during expensive operation.
-	newTokenHash, err := bcrypt.GenerateFromPassword([]byte(newSecret), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, domain.Err(500, "Failed to hash refresh token")
-	}
+	// Compute SHA-256 hash BEFORE opening transaction to avoid holding DB locks.
+	newTokenHash := sha256Hash(newSecret)
 
 	// Atomic rotation: revoke old token + insert new token in a single transaction.
 	tx, err := s.DB.Begin(ctx)
@@ -273,15 +294,17 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMe
 	}
 
 	return &domain.AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresAt:    expiresAt,
+		AccessToken:      accessToken,
+		AccessExpiresIn:  int64(accessTokenExpiry.Seconds()),
+		RefreshToken:     refreshToken,
+		RefreshExpiresIn: int64(refreshTokenExpiry.Seconds()),
+		TokenType:        "Bearer",
+		ExpiresAt:        expiresAt,
 		User: domain.UserPublic{
-			ID:       user.ID,
-			Email:    user.Email,
-			Username: user.Username,
-			Role:     user.Role,
+			ID:         user.ID,
+			Email:      user.Email,
+			ScreenName: user.ScreenName,
+			Role:       user.Role,
 		},
 	}, nil
 }
@@ -334,4 +357,12 @@ func (s *Services) PasswordForgot(ctx context.Context) error {
 
 func (s *Services) PasswordReset(ctx context.Context) error {
 	return domain.Err(501, "Password reset not yet implemented")
+}
+
+// sha256Hash returns the hex-encoded SHA-256 hash of the input.
+// Used for refresh token secrets which are already high-entropy crypto-random values,
+// so bcrypt is unnecessary overhead — SHA-256 provides equivalent security.
+func sha256Hash(input string) string {
+	h := sha256.Sum256([]byte(input))
+	return hex.EncodeToString(h[:])
 }

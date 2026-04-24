@@ -93,7 +93,7 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 	ctx.Step(`^a resposta deve conter erro de validação para "([^"]*)"$`, theResponseShouldContainValidationErrorFor)
 	ctx.Step(`^a resposta deve indicar que o post foi curtido$`, theResponseShouldIndicatePostIsLiked)
 	ctx.Step(`^a resposta deve indicar que o post foi descurtido$`, theResponseShouldIndicatePostIsUnliked)
-	ctx.Step(`^cada usuário nos resultados deve ter username contendo "([^"]*)"$`, eachUserInResultsShouldHaveUsernameContaining)
+	ctx.Step(`^cada usuário nos resultados deve ter screen_name contendo "([^"]*)"$`, eachUserInResultsShouldHaveScreenNameContaining)
 	ctx.Step(`^cada post deve ter "([^"]*)" com valor "([^"]*)"$`, eachPostShouldHaveWithValue)
 	ctx.Step(`^cada post deve ter "([^"]*)" como "([^"]*)" ou de criadores subscritos$`, eachPostShouldHaveVisibilityAsOrFromSubscribedCreators)
 	ctx.Step(`^a resposta deve conter posts do criador "([^"]*)"$`, theResponseShouldContainPostsFromCreator)
@@ -146,14 +146,14 @@ func theCacheIsConnected() error {
 	return nil
 }
 
-func iAmAuthenticatedAsUser(username string) error {
+func iAmAuthenticatedAsUser(screenName string) error {
 	// Create a test JWT token
-	testCtx.token = generateTestToken(username, "user")
+	testCtx.token = generateTestToken(screenName, "user")
 	return nil
 }
 
-func iAmAuthenticatedAsCreator(username string) error {
-	testCtx.token = generateTestToken(username, "creator")
+func iAmAuthenticatedAsCreator(screenName string) error {
+	testCtx.token = generateTestToken(screenName, "creator")
 	return nil
 }
 
@@ -164,17 +164,17 @@ func iAmNotAuthenticated() error {
 
 const testJWTSecret = "test-jwt-secret-that-is-long-enough-for-tests-32chars"
 
-func generateTestToken(username, role string) string {
+func generateTestToken(screenName, role string) string {
 	claims := jwt.MapClaims{
-		"sub":      username,
-		"roles":    []string{role},
-		"email":    username + "@test.local",
-		"username": username,
-		"exp":      time.Now().Add(time.Hour).Unix(),
-		"iat":      time.Now().Unix(),
-		"iss":      "harem-api",
-		"aud":      "harem-client",
-		"type":     "access",
+		"sub":         screenName,
+		"roles":       []string{role},
+		"email":       screenName + "@test.local",
+		"screen_name": screenName,
+		"exp":         time.Now().Add(time.Hour).Unix(),
+		"iat":         time.Now().Unix(),
+		"iss":         "harem-api",
+		"aud":         "harem-client",
+		"type":        "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, _ := token.SignedString([]byte(testJWTSecret))
@@ -401,7 +401,7 @@ func theResponseShouldIndicatePostIsUnliked() error {
 	return theResponseShouldContain("unliked")
 }
 
-func eachUserInResultsShouldHaveUsernameContaining(substring string) error {
+func eachUserInResultsShouldHaveScreenNameContaining(substring string) error {
 	return nil
 }
 
@@ -500,7 +500,7 @@ var sensitiveUserFields = []string{
 	"deleted_at", "updated_at", "last_seen_at",
 }
 
-var requiredUserFields = []string{"id", "username", "email", "role", "created_at"}
+var requiredUserFields = []string{"id", "screen_name", "email", "role", "created_at"}
 
 func theResponseShouldContainStructuredUserWithoutSensitiveFields() error {
 	if testCtx.response == nil {
@@ -534,9 +534,9 @@ func theResponseShouldContainStructuredUserWithoutSensitiveFields() error {
 		return fmt.Errorf("user.id is empty")
 	}
 
-	// Check username is non-empty
-	if username, _ := user["username"].(string); username == "" {
-		return fmt.Errorf("user.username is empty")
+	// Check screen_name is non-empty
+	if screenName, _ := user["screen_name"].(string); screenName == "" {
+		return fmt.Errorf("user.screen_name is empty")
 	}
 
 	return nil

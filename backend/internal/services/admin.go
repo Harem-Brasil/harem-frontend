@@ -20,7 +20,7 @@ func (s *Services) AdminListUsers(ctx context.Context, cursor string) (*domain.C
 	limit := 20
 
 	rows, err := s.DB.Query(ctx,
-		`SELECT id, username, email, role, created_at FROM users
+		`SELECT id, screen_name, email, role, created_at FROM users
 		 WHERE deleted_at IS NULL AND ($1 = '' OR created_at < $1)
 		 ORDER BY created_at DESC LIMIT $2`,
 		cursor, limit+1,
@@ -34,7 +34,7 @@ func (s *Services) AdminListUsers(ctx context.Context, cursor string) (*domain.C
 	for rows.Next() {
 		var u domain.UserPublic
 		var createdAt time.Time
-		err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.Role, &createdAt)
+		err := rows.Scan(&u.ID, &u.ScreenName, &u.Email, &u.Role, &createdAt)
 		if err != nil {
 			continue
 		}

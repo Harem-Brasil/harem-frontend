@@ -133,7 +133,7 @@ func (s *Services) ListChatMessages(ctx context.Context, roomID, cursor string) 
 
 	rows, err := s.DB.Query(ctx,
 		`SELECT cm.id, cm.room_id, cm.sender_id, cm.content, cm.created_at,
-		        u.id, u.username, u.role, u.avatar_url
+		        u.id, u.screen_name, u.role, u.avatar_url
 		 FROM chat_messages cm
 		 JOIN users u ON cm.sender_id = u.id
 		 WHERE cm.room_id = $1 AND cm.deleted_at IS NULL
@@ -151,7 +151,7 @@ func (s *Services) ListChatMessages(ctx context.Context, roomID, cursor string) 
 		var msg domain.ChatMessage
 		var sender domain.UserPublic
 		err := rows.Scan(&msg.ID, &msg.RoomID, &msg.SenderID, &msg.Content, &msg.CreatedAt,
-			&sender.ID, &sender.Username, &sender.Role, &sender.AvatarURL)
+			&sender.ID, &sender.ScreenName, &sender.Role, &sender.AvatarURL)
 		if err != nil {
 			continue
 		}

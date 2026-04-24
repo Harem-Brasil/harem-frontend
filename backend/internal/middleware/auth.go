@@ -11,15 +11,20 @@ import (
 	"github.com/harem-brasil/backend/internal/utils"
 )
 
+const (
+	JWTIssuer   = "harem-api"
+	JWTAudience = "harem-client"
+)
+
 type ContextKey string
 
 const UserContextKey ContextKey = "user"
 
 type UserClaims struct {
-	UserID   string   `json:"sub"`
-	Email    string   `json:"email"`
-	Roles    []string `json:"roles"`
-	Username string   `json:"username"`
+	UserID     string   `json:"sub"`
+	Email      string   `json:"email"`
+	Roles      []string `json:"roles"`
+	ScreenName string   `json:"screen_name"`
 	jwt.RegisteredClaims
 }
 
@@ -62,7 +67,10 @@ func GinAuth(jwtSecret []byte, allowedRoles []string, logger *slog.Logger) gin.H
 				return nil, jwt.ErrSignatureInvalid
 			}
 			return jwtSecret, nil
-		})
+		},
+			jwt.WithIssuer(JWTIssuer),
+			jwt.WithAudience(JWTAudience),
+		)
 
 		if err != nil || !token.Valid {
 			if logger != nil {

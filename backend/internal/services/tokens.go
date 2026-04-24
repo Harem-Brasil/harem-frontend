@@ -8,21 +8,24 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/harem-brasil/backend/internal/middleware"
 )
 
-func (s *Services) generateTokens(userID, email, username string, roles []string) (accessToken, refreshToken, tokenID string, expiresAt time.Time, err error) {
-	expiresAt = time.Now().UTC().Add(15 * time.Minute)
+func (s *Services) generateTokens(userID, email, screenName string, roles []string) (accessToken, refreshToken, tokenID string, expiresAt time.Time, err error) {
+	expiresAt = time.Now().UTC().Add(accessTokenExpiry)
+	now := time.Now().UTC()
 
 	claims := jwt.MapClaims{
-		"sub":      userID,
-		"email":    email,
-		"username": username,
-		"roles":    roles,
-		"exp":      expiresAt.Unix(),
-		"iat":      time.Now().UTC().Unix(),
-		"iss":      "harem-api",
-		"aud":      "harem-client",
-		"type":     "access",
+		"sub":         userID,
+		"email":       email,
+		"screen_name": screenName,
+		"roles":       roles,
+		"exp":         expiresAt.Unix(),
+		"iat":         now.Unix(),
+		"iss":         middleware.JWTIssuer,
+		"aud":         middleware.JWTAudience,
+		"jti":         uuid.New().String(),
+		"type":        "access",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
