@@ -166,15 +166,15 @@ const testJWTSecret = "test-jwt-secret-that-is-long-enough-for-tests-32chars"
 
 func generateTestToken(username, role string) string {
 	claims := jwt.MapClaims{
-		"sub":      username,
-		"roles":    []string{role},
-		"email":    username + "@test.local",
-		"username": username,
-		"exp":      time.Now().Add(time.Hour).Unix(),
-		"iat":      time.Now().Unix(),
-		"iss":      "harem-api",
-		"aud":      "harem-client",
-		"type":     "access",
+		"sub":         username,
+		"roles":       []string{role},
+		"email":       username + "@test.local",
+		"screen_name": username,
+		"exp":         time.Now().Add(time.Hour).Unix(),
+		"iat":         time.Now().Unix(),
+		"iss":         "harem-api",
+		"aud":         "harem-client",
+		"type":        "access",
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, _ := token.SignedString([]byte(testJWTSecret))
@@ -500,7 +500,7 @@ var sensitiveUserFields = []string{
 	"deleted_at", "updated_at", "last_seen_at",
 }
 
-var requiredUserFields = []string{"id", "username", "email", "role", "created_at"}
+var requiredUserFields = []string{"id", "screen_name", "email", "role", "created_at"}
 
 func theResponseShouldContainStructuredUserWithoutSensitiveFields() error {
 	if testCtx.response == nil {
@@ -534,9 +534,9 @@ func theResponseShouldContainStructuredUserWithoutSensitiveFields() error {
 		return fmt.Errorf("user.id is empty")
 	}
 
-	// Check username is non-empty
-	if username, _ := user["username"].(string); username == "" {
-		return fmt.Errorf("user.username is empty")
+	// Check screen_name is non-empty
+	if screenName, _ := user["screen_name"].(string); screenName == "" {
+		return fmt.Errorf("user.screen_name is empty")
 	}
 
 	return nil

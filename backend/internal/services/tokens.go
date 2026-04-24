@@ -11,21 +11,21 @@ import (
 	"github.com/harem-brasil/backend/internal/middleware"
 )
 
-func (s *Services) generateTokens(userID, email, username string, roles []string) (accessToken, refreshToken, tokenID string, expiresAt time.Time, err error) {
+func (s *Services) generateTokens(userID, email, screenName string, roles []string) (accessToken, refreshToken, tokenID string, expiresAt time.Time, err error) {
 	expiresAt = time.Now().UTC().Add(accessTokenExpiry)
 	now := time.Now().UTC()
 
 	claims := jwt.MapClaims{
-		"sub":      userID,
-		"email":    email,
-		"username": username,
-		"roles":    roles,
-		"exp":      expiresAt.Unix(),
-		"iat":      now.Unix(),
-		"iss":      middleware.JWTIssuer,
-		"aud":      middleware.JWTAudience,
-		"jti":      uuid.New().String(),
-		"type":     "access",
+		"sub":         userID,
+		"email":       email,
+		"screen_name": screenName,
+		"roles":       roles,
+		"exp":         expiresAt.Unix(),
+		"iat":         now.Unix(),
+		"iss":         middleware.JWTIssuer,
+		"aud":         middleware.JWTAudience,
+		"jti":         uuid.New().String(),
+		"type":        "access",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
