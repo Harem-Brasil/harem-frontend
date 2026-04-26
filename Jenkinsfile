@@ -28,12 +28,18 @@ pipeline {
     STAGE_API_URL         = 'https://api-stage.harembrasil.com.br'
     FRONTEND_STAGE_NAME   = 'harembrasil-frontend-stage'
 
-    // Secrets - configure no Jenkins Credentials
+    // Production Secrets - configure no Jenkins Credentials
     DATABASE_URL    = credentials('harem-brasil-database-url')
     REDIS_URL       = credentials('harem-brasil-redis-url')
     JWT_SECRET      = credentials('harem-brasil-jwt-secret')
     STRIPE_SECRET_KEY = credentials('harem-brasil-stripe-secret-key')
     CLOUDFLARE_API_TOKEN = credentials('truvis-co-cloudflare-api-token')
+
+    // Staging Secrets - configure no Jenkins Credentials (fallback to prod if not set)
+    STAGE_DATABASE_URL    = credentials('harem-brasil-database-url-stage')
+    STAGE_REDIS_URL       = credentials('harem-brasil-redis-url-stage')
+    STAGE_JWT_SECRET      = credentials('harem-brasil-jwt-secret-stage')
+    STAGE_STRIPE_SECRET_KEY = credentials('harem-brasil-stripe-secret-key-stage')
   }
 
   stages {
@@ -93,17 +99,23 @@ pipeline {
     }
 
     stage('DB Migrate') {
-      when { expression { return env.DATABASE_URL?.trim() } }
       steps {
         unstash "bin-amd64"
         dir('backend') {
           sh label: 'Run database migrations', script: '''
             set -euo pipefail
             chmod +x ../artifacts/harem-api-linux-amd64
-            export DATABASE_URL="${DATABASE_URL}"
-            export REDIS_URL="${REDIS_URL}"
-            export JWT_SECRET="${JWT_SECRET}"
-            export STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY}"
+            if [ "${GIT_BRANCH}" = "main" ]; then
+              export DATABASE_URL="${DATABASE_URL}"
+              export REDIS_URL="${REDIS_URL}"
+              export JWT_SECRET="${JWT_SECRET}"
+              export STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY}"
+            else
+              export DATABASE_URL="${STAGE_DATABASE_URL}"
+              export REDIS_URL="${STAGE_REDIS_URL}"
+              export JWT_SECRET="${STAGE_JWT_SECRET}"
+              export STRIPE_SECRET_KEY="${STAGE_STRIPE_SECRET_KEY}"
+            fi
             ../artifacts/harem-api-linux-amd64 migrate -dir ./migrations
           '''
         }
@@ -122,7 +134,7 @@ BIN_LOCAL="artifacts/harem-api-linux-amd64"
 # Criar arquivo .env localmente
 COMMIT=$(git rev-parse --short HEAD)
 printf 'PORT=%s\nENV=staging\nCOMMIT_HASH=%s\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
-  "$STAGE_PORT" "$COMMIT" "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api-stage.env
+  "$STAGE_PORT" "$COMMIT" "$STAGE_DATABASE_URL" "$STAGE_REDIS_URL" "$STAGE_JWT_SECRET" "$STAGE_STRIPE_SECRET_KEY" > /tmp/harem-api-stage.env
 
 # Upload arquivos para /tmp no target
 scp "$BIN_LOCAL" ${STAGE_TARGET_HOST}:/tmp/harem-api-stage
