@@ -35,7 +35,7 @@ pipeline {
     STRIPE_SECRET_KEY = credentials('harem-brasil-stripe-secret-key')
     CLOUDFLARE_API_TOKEN = credentials('truvis-co-cloudflare-api-token')
 
-    // Staging Secrets - configure no Jenkins Credentials (fallback to prod if not set)
+    // Staging Secrets - configure no Jenkins Credentials
     STAGE_DATABASE_URL    = credentials('harem-brasil-database-url-stage')
     STAGE_REDIS_URL       = credentials('harem-brasil-redis-url-stage')
     STAGE_JWT_SECRET      = credentials('harem-brasil-jwt-secret-stage')
@@ -222,6 +222,7 @@ SERVICEFILE
             npx wrangler deploy \
               --name "${FRONTEND_STAGE_NAME}" \
               --var API_URL:"${STAGE_API_URL}" \
+              --var APP_ENV:"staging" \
               --var COMMIT_HASH:"$(git rev-parse --short HEAD)"
           '''
         }
@@ -249,7 +250,7 @@ SERVICEFILE
           echo ""
 
           echo "=== API info ==="
-          curl -sf -D - "${STAGE_API_URL}/healthz" | head -c 200 || true
+          curl -sf -D - "${STAGE_API_URL}/readyz" | head -c 200 || true
           echo ""
 
           echo "=== Validate X-Environment header ==="
@@ -365,6 +366,7 @@ SERVICEFILE
             export API_URL="${API_URL:-https://api.harembrasil.com.br}"
             npx wrangler deploy \
               --var API_URL:"${API_URL}" \
+              --var APP_ENV:"production" \
               --var COMMIT_HASH:"$(git rev-parse --short HEAD)"
           '''
         }
