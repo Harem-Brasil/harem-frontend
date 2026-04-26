@@ -24,6 +24,7 @@ pipeline {
     STAGE_TARGET_DIR      = '/var/www/vhosts/api-stage.harembrasil.com.br'
     STAGE_SERVICE_NAME    = 'harem-api-stage'
     STAGE_SERVICE_USER    = 'grimlock'
+    STAGE_PORT            = '40081'
     STAGE_API_URL         = 'https://api-stage.harembrasil.com.br'
     FRONTEND_STAGE_NAME   = 'harembrasil-frontend-stage'
 
@@ -116,8 +117,8 @@ set -euo pipefail
 BIN_LOCAL="artifacts/harem-api-linux-amd64"
 
 # Criar arquivo .env localmente
-printf 'PORT=40080\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
-  "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api-stage.env
+printf 'PORT=%s\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
+  "$STAGE_PORT" "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api-stage.env
 
 # Upload arquivos para /tmp no target
 scp "$BIN_LOCAL" ${STAGE_TARGET_HOST}:/tmp/harem-api-stage
