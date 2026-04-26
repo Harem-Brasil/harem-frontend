@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "VITE_APP_ENV=development vite",
+    "dev": "VITE_APP_ENV=development VITE_APP_COMMIT_HASH=local vite",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "lint": "eslint .",

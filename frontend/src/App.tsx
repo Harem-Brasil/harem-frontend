@@ -8,6 +8,7 @@ function App() {
 
   const [apiEnv, setApiEnv] = useState<string | null>(null)
   const [apiError, setApiError] = useState<string | null>(null)
+  const commitHash = document.querySelector('meta[name="commit-hash"]')?.getAttribute('content') || 'unknown'
 
   useEffect(() => {
     fetch('/api/health')
@@ -83,6 +84,9 @@ function App() {
           )}
           {apiError && (
             <span className="ml-2 text-red-400">API offline</span>
+          )}
+          {commitHash && commitHash !== 'unknown' && (
+            <span className="ml-2 text-gray-500">Commit: {commitHash}</span>
           )}
         </div>
       </div>

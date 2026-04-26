@@ -84,6 +84,7 @@ pipeline {
               sh label: 'Run tests', script: 'npm test'
               sh label: 'Build frontend', script: """
                 export VITE_APP_ENV="${env.GIT_BRANCH == 'main' ? 'production' : 'staging'}"
+                export VITE_APP_COMMIT_HASH="\$(git rev-parse --short HEAD)"
                 npm run build
               """
             }

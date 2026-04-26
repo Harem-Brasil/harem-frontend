@@ -6,6 +6,11 @@ import { cloudflare } from "@cloudflare/vite-plugin";
 
 function envMetaPlugin(): Plugin {
   const getEnv = () => process.env.VITE_APP_ENV || 'development'
+  const getCommit = () => process.env.VITE_APP_COMMIT_HASH || 'unknown'
+
+  const replaceVars = (html: string) =>
+    html.replace(/%VITE_APP_ENV%/g, getEnv())
+        .replace(/%VITE_APP_COMMIT_HASH%/g, getCommit())
 
   return {
     name: 'env-meta',
@@ -13,7 +18,7 @@ function envMetaPlugin(): Plugin {
     transformIndexHtml: {
       order: 'pre',
       handler(html) {
-        return html.replace(/%VITE_APP_ENV%/g, getEnv())
+        return replaceVars(html)
       }
     },
     configureServer(server) {
@@ -23,8 +28,7 @@ function envMetaPlugin(): Plugin {
           let html = ''
           res.end = function(chunk: any, ...args: any[]) {
             if (chunk) html += chunk.toString()
-            const replaced = html.replace(/%VITE_APP_ENV%/g, getEnv())
-            return _end(Buffer.from(replaced), ...args)
+            return _end(Buffer.from(replaceVars(html)), ...args)
           }
         }
         next()
