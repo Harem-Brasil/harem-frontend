@@ -1,8 +1,24 @@
+import { useState, useEffect } from 'react'
+
 function App() {
   const particles = Array.from({ length: 9 }, (_, i) => ({
     left: `${(i + 1) * 10}%`,
     delay: `${[0, 2, 4, 1, 3, 5, 2, 4, 1][i]}s`,
   }))
+
+  const [apiEnv, setApiEnv] = useState<string | null>(null)
+  const [apiError, setApiError] = useState<string | null>(null)
+  const commitHash = document.querySelector('meta[name="commit-hash"]')?.getAttribute('content') || 'unknown'
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then((res) => {
+        setApiEnv(res.headers.get('X-Environment') || 'unknown')
+      })
+      .catch((err) => {
+        setApiError(err.message)
+      })
+  }, [])
 
   return (
     <div className="relative flex h-dvh w-full items-center justify-center overflow-hidden bg-black text-center">
@@ -63,6 +79,15 @@ function App() {
 
         <div className="mt-8 text-xs text-gray-600">
           Plataforma em desenvolvimento &bull; Lançamento em breve
+          {apiEnv && (
+            <span className="ml-2 text-gold">API: {apiEnv}</span>
+          )}
+          {apiError && (
+            <span className="ml-2 text-red-400">API offline</span>
+          )}
+          {commitHash && commitHash !== 'unknown' && (
+            <span className="ml-2 text-gray-500">Commit: {commitHash}</span>
+          )}
         </div>
       </div>
     </div>

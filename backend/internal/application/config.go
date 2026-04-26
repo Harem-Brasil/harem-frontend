@@ -25,4 +25,5 @@ type Config struct {
 	PagSeguroWebhookSecret   string
 	MercadoPagoWebhookSecret string
 	AppEnv                   string
+	CommitHash               string
 }
