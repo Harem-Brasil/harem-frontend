@@ -80,6 +80,9 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 			env = "development"
 		}
 		c.Header("X-Environment", env)
+		if cfg.CommitHash != "" {
+			c.Header("X-Commit-Hash", cfg.CommitHash)
+		}
 		c.Next()
 	})
 

@@ -83,6 +83,7 @@ func runServe(logger *slog.Logger, dbURL string) {
 		PagSeguroWebhookSecret:   getEnv("PAGSEGURO_WEBHOOK_SECRET", ""),
 		MercadoPagoWebhookSecret: getEnv("MERCADOPAGO_WEBHOOK_SECRET", ""),
 		AppEnv:                   getEnv("ENV", ""),
+		CommitHash:               getEnv("COMMIT_HASH", ""),
 	})
 	if err != nil {
 		slog.Error("failed to create server", "error", err)

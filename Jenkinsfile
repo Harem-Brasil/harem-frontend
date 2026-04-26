@@ -120,8 +120,9 @@ set -euo pipefail
 BIN_LOCAL="artifacts/harem-api-linux-amd64"
 
 # Criar arquivo .env localmente
-printf 'PORT=%s\nENV=staging\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
-  "$STAGE_PORT" "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api-stage.env
+COMMIT=$(git rev-parse --short HEAD)
+printf 'PORT=%s\nENV=staging\nCOMMIT_HASH=%s\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
+  "$STAGE_PORT" "$COMMIT" "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api-stage.env
 
 # Upload arquivos para /tmp no target
 scp "$BIN_LOCAL" ${STAGE_TARGET_HOST}:/tmp/harem-api-stage
@@ -261,8 +262,9 @@ set -euo pipefail
 BIN_LOCAL="artifacts/harem-api-linux-amd64"
 
 # Criar arquivo .env localmente
-printf 'PORT=40080\nENV=production\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
-  "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api.env
+COMMIT=$(git rev-parse --short HEAD)
+printf 'PORT=40080\nENV=production\nCOMMIT_HASH=%s\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
+  "$COMMIT" "$DATABASE_URL" "$REDIS_URL" "$JWT_SECRET" "$STRIPE_SECRET_KEY" > /tmp/harem-api.env
 
 # Upload arquivos para /tmp no target
 scp "$BIN_LOCAL" ${TARGET_HOST}:/tmp/harem-api
