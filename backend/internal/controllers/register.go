@@ -128,7 +128,9 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				return
 			}
 			// Set state as HttpOnly cookie for CSRF protection
-			c.SetCookie("oauth_state", result.State, 600, "/", "", false, true)
+			// Secure: true in production (HTTPS); SameSite=Lax for OAuth redirect flow
+			c.SetSameSite(http.SameSiteLaxMode)
+			c.SetCookie("oauth_state", result.State, 600, "/", "", true, true)
 			c.Redirect(http.StatusFound, result.AuthorizeURL)
 		})
 		authPublic.GET("/auth/oauth/:provider/callback", func(c *gin.Context) {
@@ -143,7 +145,8 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 				utils.RespondProblem(c, http.StatusBadRequest, "Invalid OAuth state", "CSRF state mismatch")
 				return
 			}
-			c.SetCookie("oauth_state", "", -1, "/", "", false, true) // consume
+			c.SetSameSite(http.SameSiteLaxMode)
+			c.SetCookie("oauth_state", "", -1, "/", "", true, true) // consume
 
 			meta := &services.SessionMeta{
 				IP:        c.ClientIP(),

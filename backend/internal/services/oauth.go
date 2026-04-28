@@ -144,7 +144,7 @@ func (s *Services) OAuthCallback(ctx context.Context, provider, stateParam, code
 	}
 
 	// Exchange code for tokens
-	tokenResp, err := exchangeCodeForTokens(cfg, code, stored.CodeVerifier, redirectURI)
+	tokenResp, err := exchangeCodeForTokens(ctx, cfg, code, stored.CodeVerifier, redirectURI)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error("OAuth token exchange failed", "provider", provider, "error", err)
@@ -153,7 +153,7 @@ func (s *Services) OAuthCallback(ctx context.Context, provider, stateParam, code
 	}
 
 	// Fetch user info from provider
-	userInfo, err := fetchUserInfo(cfg, tokenResp.AccessToken)
+	userInfo, err := fetchUserInfo(ctx, cfg, tokenResp.AccessToken)
 	if err != nil {
 		if s.Logger != nil {
 			s.Logger.Error("OAuth userinfo fetch failed", "provider", provider, "error", err)
@@ -360,7 +360,7 @@ type tokenResponse struct {
 	Scope       string `json:"scope"`
 }
 
-func exchangeCodeForTokens(cfg OAuthProviderConfig, code, codeVerifier, redirectURI string) (*tokenResponse, error) {
+func exchangeCodeForTokens(ctx context.Context, cfg OAuthProviderConfig, code, codeVerifier, redirectURI string) (*tokenResponse, error) {
 	params := url.Values{}
 	params.Set("grant_type", "authorization_code")
 	params.Set("code", code)
@@ -369,7 +369,14 @@ func exchangeCodeForTokens(cfg OAuthProviderConfig, code, codeVerifier, redirect
 	params.Set("redirect_uri", redirectURI)
 	params.Set("code_verifier", codeVerifier)
 
-	resp, err := http.PostForm(cfg.TokenURL, params)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.TokenURL, strings.NewReader(params.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("token request creation failed: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token request failed: %w", err)
 	}
@@ -390,14 +397,15 @@ func exchangeCodeForTokens(cfg OAuthProviderConfig, code, codeVerifier, redirect
 
 // --- UserInfo fetch ---
 
-func fetchUserInfo(cfg OAuthProviderConfig, accessToken string) (*OAuthUserInfo, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, cfg.UserInfoURL, nil)
+func fetchUserInfo(ctx context.Context, cfg OAuthProviderConfig, accessToken string) (*OAuthUserInfo, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.UserInfoURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create userinfo request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("userinfo request failed: %w", err)
 	}
