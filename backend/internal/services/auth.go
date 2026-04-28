@@ -235,10 +235,12 @@ func (s *Services) Refresh(ctx context.Context, req RefreshBody, meta *SessionMe
 				"reason", "revoked_token_reuse",
 			)
 		}
-		_, _ = s.DB.Exec(ctx,
+		if _, err := s.DB.Exec(ctx,
 			`UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = $1 AND revoked_at IS NULL`,
 			session.UserID,
-		)
+		); err != nil {
+			s.Logger.Error("failed to revoke tokens on reuse detection", "error", err, "user_id", session.UserID)
+		}
 		return nil, domain.Err(401, "Refresh token revoked")
 	}
 
