@@ -24,6 +24,11 @@ func New(db *pgxpool.Pool) *Seeder {
 	return &Seeder{db: db}
 }
 
+// Run executes all seeders.
+// Requires migrations 001-003 to be applied:
+//   - 001: base schema (users, posts, forum, chat tables)
+//   - 002: adds email_verified_at, accept_terms_version to users
+//   - 003: renames username → screen_name
 func (s *Seeder) Run(ctx context.Context) error {
 	slog.Info("starting database seeding...")
 
@@ -192,6 +197,14 @@ func (s *Seeder) seedPosts(ctx context.Context, userIDs []string) ([]string, err
 	return ids, nil
 }
 
+// safeRandIdx returns a random index >= min within userIDs, or 0 if not enough users.
+func safeRandIdx(userIDs []string, min int) int {
+	if len(userIDs) <= min {
+		return 0
+	}
+	return min + rand.Intn(len(userIDs)-min)
+}
+
 // --- Comments ---
 
 func (s *Seeder) seedComments(ctx context.Context, userIDs, postIDs []string) error {
@@ -216,7 +229,7 @@ func (s *Seeder) seedComments(ctx context.Context, userIDs, postIDs []string) er
 		nComments := 2 + rand.Intn(3)
 		for j := 0; j < nComments && j < len(commentTexts); j++ {
 			id := uuid.New().String()
-			authorIdx := 5 + rand.Intn(len(userIDs)-5) // regular users comment
+			authorIdx := safeRandIdx(userIDs, 5) // regular users comment
 			if authorIdx >= len(userIDs) {
 				authorIdx = len(userIDs) - 1
 			}
@@ -249,7 +262,7 @@ func (s *Seeder) seedLikes(ctx context.Context, userIDs, postIDs []string) error
 		nLikes := 3 + rand.Intn(6)
 		likedBy := make(map[int]bool)
 		for j := 0; j < nLikes; j++ {
-			idx := 5 + rand.Intn(len(userIDs)-5)
+			idx := safeRandIdx(userIDs, 5)
 			if likedBy[idx] || idx >= len(userIDs) {
 				continue
 			}
@@ -266,7 +279,9 @@ func (s *Seeder) seedLikes(ctx context.Context, userIDs, postIDs []string) error
 		}
 
 		// Update like_count on the post
-		s.db.Exec(ctx, `UPDATE posts SET like_count = (SELECT COUNT(*) FROM post_likes WHERE post_id = $1) WHERE id = $1`, postID)
+		if _, err := s.db.Exec(ctx, `UPDATE posts SET like_count = (SELECT COUNT(*) FROM post_likes WHERE post_id = $1) WHERE id = $1`, postID); err != nil {
+			slog.Warn("failed to update post like count", "post_id", postID, "error", err)
+		}
 	}
 
 	slog.Info("likes seeded", "count", count)
@@ -418,7 +433,7 @@ func (s *Seeder) seedForumPosts(ctx context.Context, userIDs, topicIDs []string)
 		nReplies := 2 + rand.Intn(4)
 		for j := 0; j < nReplies; j++ {
 			id := uuid.New().String()
-			authorIdx := 5 + rand.Intn(len(userIDs)-5)
+			authorIdx := safeRandIdx(userIDs, 5)
 			if authorIdx >= len(userIDs) {
 				authorIdx = len(userIDs) - 1
 			}
@@ -437,7 +452,9 @@ func (s *Seeder) seedForumPosts(ctx context.Context, userIDs, topicIDs []string)
 		}
 
 		// Update reply_count on the topic
-		s.db.Exec(ctx, `UPDATE forum_topics SET reply_count = (SELECT COUNT(*) FROM forum_posts WHERE topic_id = $1 AND is_first_post = false) WHERE id = $1`, topicID)
+		if _, err := s.db.Exec(ctx, `UPDATE forum_topics SET reply_count = (SELECT COUNT(*) FROM forum_posts WHERE topic_id = $1 AND is_first_post = false) WHERE id = $1`, topicID); err != nil {
+			slog.Warn("failed to update topic reply count", "topic_id", topicID, "error", err)
+		}
 	}
 
 	slog.Info("forum posts (replies) seeded", "count", count)
