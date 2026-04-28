@@ -51,6 +51,7 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 		PagSeguroWebhookSecret:   cfg.PagSeguroWebhookSecret,
 		MercadoPagoWebhookSecret: cfg.MercadoPagoWebhookSecret,
 		AppEnv:                   cfg.AppEnv,
+		OAuthProviders:           cfg.OAuthProviders,
 	})
 
 	corsOrigins := cfg.CORSAllowedOrigins

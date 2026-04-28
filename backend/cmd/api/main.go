@@ -15,6 +15,7 @@ import (
 	"github.com/harem-brasil/backend/internal/application"
 	"github.com/harem-brasil/backend/internal/migrate"
 	"github.com/harem-brasil/backend/internal/seed"
+	"github.com/harem-brasil/backend/internal/services"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
@@ -74,6 +75,8 @@ func runServe(logger *slog.Logger, dbURL string) {
 
 	corsOrigins := parseCommaSeparatedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
 
+	oauthProviders := buildOAuthProviders()
+
 	initCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
@@ -89,6 +92,7 @@ func runServe(logger *slog.Logger, dbURL string) {
 		MercadoPagoWebhookSecret: getEnv("MERCADOPAGO_WEBHOOK_SECRET", ""),
 		AppEnv:                   getEnv("ENV", ""),
 		CommitHash:               getEnv("COMMIT_HASH", ""),
+		OAuthProviders:           oauthProviders,
 	})
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
@@ -179,6 +183,25 @@ func getEnv(key, defaultValue string) string {
 		return v
 	}
 	return defaultValue
+}
+
+// buildOAuthProviders reads OAUTH_GOOGLE_* env vars and returns a provider map.
+// Add more providers by reading additional OAUTH_<PROVIDER>_* env vars.
+func buildOAuthProviders() map[string]services.OAuthProviderConfig {
+	providers := map[string]services.OAuthProviderConfig{}
+
+	if id := os.Getenv("OAUTH_GOOGLE_CLIENT_ID"); id != "" {
+		providers["google"] = services.OAuthProviderConfig{
+			ClientID:     id,
+			ClientSecret: os.Getenv("OAUTH_GOOGLE_CLIENT_SECRET"),
+			AuthorizeURL: getEnv("OAUTH_GOOGLE_AUTHORIZE_URL", "https://accounts.google.com/o/oauth2/v2/auth"),
+			TokenURL:     getEnv("OAUTH_GOOGLE_TOKEN_URL", "https://oauth2.googleapis.com/token"),
+			UserInfoURL:  getEnv("OAUTH_GOOGLE_USERINFO_URL", "https://openidconnect.googleapis.com/v1/userinfo"),
+			Scopes:       []string{"openid", "email", "profile"},
+		}
+	}
+
+	return providers
 }
 
 // parseCommaSeparatedOrigins divide CORS_ALLOWED_ORIGINS (vírgulas).

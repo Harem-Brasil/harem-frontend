@@ -410,14 +410,6 @@ func (s *Services) LogoutAll(ctx context.Context, user *middleware.UserClaims) e
 	return nil
 }
 
-func (s *Services) OAuthAuthorize(ctx context.Context, provider string) error {
-	return domain.Err(501, "OAuth authorization not yet implemented")
-}
-
-func (s *Services) OAuthCallback(ctx context.Context, provider string) error {
-	return domain.Err(501, "OAuth callback not yet implemented")
-}
-
 func (s *Services) EmailVerify(ctx context.Context) error {
 	return domain.Err(501, "Email verification not yet implemented")
 }
