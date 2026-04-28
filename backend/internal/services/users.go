@@ -11,6 +11,7 @@ import (
 	"github.com/harem-brasil/backend/internal/middleware"
 	"github.com/harem-brasil/backend/internal/utils"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -53,7 +54,11 @@ func (s *Services) GetMe(ctx context.Context, claims *middleware.UserClaims) (*d
 
 	var notifyPrefs map[string]any
 	if len(u.NotifyPreferences) > 0 {
-		_ = json.Unmarshal(u.NotifyPreferences, &notifyPrefs)
+		if err := json.Unmarshal(u.NotifyPreferences, &notifyPrefs); err != nil {
+			if s.Logger != nil {
+				s.Logger.Error("malformed notify_preferences in DB", "user_id", u.ID, "error", err)
+			}
+		}
 	}
 	if notifyPrefs == nil {
 		notifyPrefs = map[string]any{"email": true, "push": true}
@@ -127,6 +132,10 @@ func (s *Services) UpdateMe(ctx context.Context, claims *middleware.UserClaims, 
 	query := fmt.Sprintf("UPDATE users SET %s WHERE id = $%d", strings.Join(setClauses, ", "), argIdx)
 	_, err := s.DB.Exec(ctx, query, args...)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return nil, domain.Err(409, "Screen name already taken")
+		}
 		return nil, domain.Err(500, "Failed to update user")
 	}
 

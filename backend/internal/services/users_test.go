@@ -76,6 +76,18 @@ func TestPatchMeRequest_Validate(t *testing.T) {
 			wantOK:  false,
 			wantErr: "not allowed",
 		},
+		{
+			name:    "notify_preferences with non-boolean value",
+			req:     domain.PatchMeRequest{NotifyPreferences: &map[string]any{"email": "yes"}},
+			wantOK:  false,
+			wantErr: "must be a boolean",
+		},
+		{
+			name:    "notify_preferences with numeric value",
+			req:     domain.PatchMeRequest{NotifyPreferences: &map[string]any{"push": float64(1)}},
+			wantOK:  false,
+			wantErr: "must be a boolean",
+		},
 	}
 
 	for _, tt := range tests {

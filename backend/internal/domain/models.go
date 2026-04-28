@@ -186,9 +186,13 @@ func (req *PatchMeRequest) Validate() (map[string]string, bool) {
 		}
 	}
 	if req.NotifyPreferences != nil {
-		for k := range *req.NotifyPreferences {
+		for k, v := range *req.NotifyPreferences {
 			if !AllowedNotifyPrefKeys[k] {
 				errs["notify_preferences"] = "Key '" + k + "' is not allowed in notify_preferences"
+				break
+			}
+			if _, ok := v.(bool); !ok {
+				errs["notify_preferences"] = "Value for key '" + k + "' must be a boolean"
 				break
 			}
 		}
