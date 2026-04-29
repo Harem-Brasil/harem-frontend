@@ -1,6 +1,10 @@
 package application
 
-import "log/slog"
+import (
+	"log/slog"
+
+	"github.com/harem-brasil/backend/internal/services"
+)
 
 // DefaultCORSAllowedOrigins são origens usadas quando CORS_ALLOWED_ORIGINS não está definido
 // (desenvolvimento local com frontends típicos). Em produção, defina CORS_ALLOWED_ORIGINS.
@@ -26,4 +30,7 @@ type Config struct {
 	MercadoPagoWebhookSecret string
 	AppEnv                   string
 	CommitHash               string
+
+	// OAuth provider configs — secrets from env vars, never committed.
+	OAuthProviders map[string]services.OAuthProviderConfig
 }

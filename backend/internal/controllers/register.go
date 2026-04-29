@@ -117,16 +117,47 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 			utils.RespondJSON(c, http.StatusOK, resp)
 		})
 		authPublic.GET("/auth/oauth/:provider/authorize", func(c *gin.Context) {
-			if err := svc.OAuthAuthorize(c.Request.Context(), c.Param("provider")); err != nil {
+			provider := c.Param("provider")
+			redirectURI := c.Query("redirect_uri")
+			if redirectURI == "" {
+				redirectURI = c.Request.Referer()
+			}
+			result, err := svc.OAuthAuthorize(c.Request.Context(), provider, redirectURI)
+			if err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
 			}
+			// Set state as HttpOnly cookie for CSRF protection
+			// Secure: true in production (HTTPS); SameSite=Lax for OAuth redirect flow
+			c.SetSameSite(http.SameSiteLaxMode)
+			c.SetCookie("oauth_state", result.State, 600, "/", "", true, true)
+			c.Redirect(http.StatusFound, result.AuthorizeURL)
 		})
 		authPublic.GET("/auth/oauth/:provider/callback", func(c *gin.Context) {
-			if err := svc.OAuthCallback(c.Request.Context(), c.Param("provider")); err != nil {
+			provider := c.Param("provider")
+			state := c.Query("state")
+			code := c.Query("code")
+			redirectURI := c.Query("redirect_uri")
+
+			// Validate state against cookie
+			cookieState, err := c.Cookie("oauth_state")
+			if err != nil || cookieState != state {
+				utils.RespondProblem(c, http.StatusBadRequest, "Invalid OAuth state", "CSRF state mismatch")
+				return
+			}
+			c.SetSameSite(http.SameSiteLaxMode)
+			c.SetCookie("oauth_state", "", -1, "/", "", true, true) // consume
+
+			meta := &services.SessionMeta{
+				IP:        c.ClientIP(),
+				UserAgent: c.GetHeader("User-Agent"),
+			}
+			result, err := svc.OAuthCallback(c.Request.Context(), provider, state, code, redirectURI, meta)
+			if err != nil {
 				utils.HandleServiceError(c, logger, err)
 				return
 			}
+			utils.RespondJSON(c, http.StatusOK, result.AuthResponse)
 		})
 		authPublic.POST("/auth/email/verify", func(c *gin.Context) {
 			if err := svc.EmailVerify(c.Request.Context()); err != nil {
