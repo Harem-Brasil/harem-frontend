@@ -37,6 +37,9 @@ type OAuthProviderConfig struct {
 	Scopes       []string
 
 	// AllowedRedirectURIs is an allowlist of permitted redirect_uri values.
-	// If empty, all URIs are accepted (useful for development only).
+	// Must be non-empty in production. Set AllowAllRedirectURIs=true to accept
+	// any redirect_uri (development only — never in production).
 	AllowedRedirectURIs []string
+
+	AllowAllRedirectURIs bool // dev-mode escape hatch; must be false in production
 }

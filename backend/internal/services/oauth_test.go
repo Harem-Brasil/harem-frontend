@@ -151,30 +151,42 @@ func TestValidateRedirectURI(t *testing.T) {
 	tests := []struct {
 		name        string
 		allowlist   []string
+		allowAll    bool
 		redirectURI string
 		wantErr     bool
 	}{
 		{
-			name:        "empty allowlist accepts all",
+			name:        "empty allowlist without AllowAll rejected",
 			allowlist:   nil,
+			allowAll:    false,
+			redirectURI: "http://localhost:3000/callback",
+			wantErr:     true,
+		},
+		{
+			name:        "AllowAll accepts any URI",
+			allowlist:   nil,
+			allowAll:    true,
 			redirectURI: "http://evil.com/callback",
 			wantErr:     false,
 		},
 		{
 			name:        "uri in allowlist",
 			allowlist:   []string{"http://localhost:3000/callback", "https://app.example.com/callback"},
+			allowAll:    false,
 			redirectURI: "http://localhost:3000/callback",
 			wantErr:     false,
 		},
 		{
 			name:        "uri not in allowlist",
 			allowlist:   []string{"http://localhost:3000/callback"},
+			allowAll:    false,
 			redirectURI: "http://evil.com/callback",
 			wantErr:     true,
 		},
 		{
 			name:        "empty redirect_uri rejected",
 			allowlist:   nil,
+			allowAll:    true,
 			redirectURI: "",
 			wantErr:     true,
 		},
@@ -182,7 +194,7 @@ func TestValidateRedirectURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := OAuthProviderConfig{AllowedRedirectURIs: tt.allowlist}
+			cfg := OAuthProviderConfig{AllowedRedirectURIs: tt.allowlist, AllowAllRedirectURIs: tt.allowAll}
 			err := validateRedirectURI(cfg, tt.redirectURI)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateRedirectURI() error = %v, wantErr %v", err, tt.wantErr)
@@ -199,43 +211,87 @@ func TestValidateIDToken(t *testing.T) {
 		IssuerURL: "https://accounts.google.com",
 	}
 
-	t.Run("valid ID token", func(t *testing.T) {
+	t.Run("valid ID token with string aud", func(t *testing.T) {
 		token := buildTestIDToken(t, "https://accounts.google.com", "my-client-id", "test-nonce", time.Now().Add(time.Hour).Unix())
-		if err := validateIDToken(token, cfg, "test-nonce"); err != nil {
+		sub, err := validateIDToken(token, cfg, "test-nonce")
+		if err != nil {
 			t.Errorf("validateIDToken() unexpected error: %v", err)
+		}
+		if sub != "12345" {
+			t.Errorf("sub = %q, want %q", sub, "12345")
+		}
+	})
+
+	t.Run("valid ID token with array aud", func(t *testing.T) {
+		token := buildTestIDTokenArrAud(t, "https://accounts.google.com", []string{"my-client-id", "other-aud"}, "test-nonce", time.Now().Add(time.Hour).Unix())
+		sub, err := validateIDToken(token, cfg, "test-nonce")
+		if err != nil {
+			t.Errorf("validateIDToken() unexpected error: %v", err)
+		}
+		if sub != "12345" {
+			t.Errorf("sub = %q, want %q", sub, "12345")
+		}
+	})
+
+	t.Run("array aud without matching clientID", func(t *testing.T) {
+		token := buildTestIDTokenArrAud(t, "https://accounts.google.com", []string{"wrong-aud", "other"}, "test-nonce", time.Now().Add(time.Hour).Unix())
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err == nil {
+			t.Error("expected error for aud not containing clientID, got nil")
 		}
 	})
 
 	t.Run("wrong issuer", func(t *testing.T) {
 		token := buildTestIDToken(t, "https://evil.com", "my-client-id", "test-nonce", time.Now().Add(time.Hour).Unix())
-		if err := validateIDToken(token, cfg, "test-nonce"); err == nil {
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err == nil {
 			t.Error("expected error for wrong issuer, got nil")
 		}
 	})
 
 	t.Run("wrong audience", func(t *testing.T) {
 		token := buildTestIDToken(t, "https://accounts.google.com", "wrong-aud", "test-nonce", time.Now().Add(time.Hour).Unix())
-		if err := validateIDToken(token, cfg, "test-nonce"); err == nil {
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err == nil {
 			t.Error("expected error for wrong audience, got nil")
 		}
 	})
 
 	t.Run("wrong nonce", func(t *testing.T) {
 		token := buildTestIDToken(t, "https://accounts.google.com", "my-client-id", "wrong-nonce", time.Now().Add(time.Hour).Unix())
-		if err := validateIDToken(token, cfg, "test-nonce"); err == nil {
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err == nil {
 			t.Error("expected error for wrong nonce, got nil")
 		}
 	})
 
 	t.Run("expired token", func(t *testing.T) {
-		token := buildTestIDToken(t, "https://accounts.google.com", "my-client-id", "test-nonce", time.Now().Add(-time.Hour).Unix())
-		if err := validateIDToken(token, cfg, "test-nonce"); err == nil {
+		token := buildTestIDToken(t, "https://accounts.google.com", "my-client-id", "test-nonce", time.Now().Add(-2*time.Minute).Unix())
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err == nil {
 			t.Error("expected error for expired token, got nil")
 		}
 	})
 
+	t.Run("token within 60s leeway still valid", func(t *testing.T) {
+		token := buildTestIDToken(t, "https://accounts.google.com", "my-client-id", "test-nonce", time.Now().Add(-30*time.Second).Unix())
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err != nil {
+			t.Errorf("token within 60s leeway should be valid, got error: %v", err)
+		}
+	})
+
+	t.Run("missing exp claim", func(t *testing.T) {
+		token := buildTestIDTokenNoExp(t, "https://accounts.google.com", "my-client-id", "test-nonce")
+		_, err := validateIDToken(token, cfg, "test-nonce")
+		if err == nil {
+			t.Error("expected error for missing exp, got nil")
+		}
+	})
+
 	t.Run("malformed token", func(t *testing.T) {
-		if err := validateIDToken("not-a-jwt", cfg, ""); err == nil {
+		_, err := validateIDToken("not-a-jwt", cfg, "")
+		if err == nil {
 			t.Error("expected error for malformed token, got nil")
 		}
 	})
@@ -243,19 +299,92 @@ func TestValidateIDToken(t *testing.T) {
 	t.Run("empty IssuerURL skips iss check", func(t *testing.T) {
 		cfgNoIss := OAuthProviderConfig{ClientID: "my-client-id", IssuerURL: ""}
 		token := buildTestIDToken(t, "https://any-issuer.com", "my-client-id", "nonce1", time.Now().Add(time.Hour).Unix())
-		if err := validateIDToken(token, cfgNoIss, "nonce1"); err != nil {
+		_, err := validateIDToken(token, cfgNoIss, "nonce1")
+		if err != nil {
 			t.Errorf("validateIDToken() with empty IssuerURL unexpected error: %v", err)
 		}
 	})
 }
 
+// --- audContains tests ---
+
+func TestAudContains(t *testing.T) {
+	t.Run("string aud match", func(t *testing.T) {
+		raw := json.RawMessage(`"my-client"`)
+		if !audContains(raw, "my-client") {
+			t.Error("expected true")
+		}
+	})
+	t.Run("string aud no match", func(t *testing.T) {
+		raw := json.RawMessage(`"other-client"`)
+		if audContains(raw, "my-client") {
+			t.Error("expected false")
+		}
+	})
+	t.Run("array aud match", func(t *testing.T) {
+		raw := json.RawMessage(`["my-client","other"]`)
+		if !audContains(raw, "my-client") {
+			t.Error("expected true")
+		}
+	})
+	t.Run("array aud no match", func(t *testing.T) {
+		raw := json.RawMessage(`["a","b"]`)
+		if audContains(raw, "my-client") {
+			t.Error("expected false")
+		}
+	})
+	t.Run("invalid json", func(t *testing.T) {
+		raw := json.RawMessage(`not-json`)
+		if audContains(raw, "my-client") {
+			t.Error("expected false")
+		}
+	})
+}
+
+// --- Test helpers ---
+
 // buildTestIDToken creates a minimal JWT with the given claims for testing.
 // The signature is a dummy (not verified by validateIDToken).
 func buildTestIDToken(t *testing.T, iss, aud, nonce string, exp int64) string {
 	t.Helper()
+	claims := map[string]any{
+		"iss":   iss,
+		"aud":   aud,
+		"sub":   "12345",
+		"nonce": nonce,
+		"exp":   exp,
+	}
+	return buildJWT(t, claims)
+}
 
+// buildTestIDTokenArrAud creates a JWT with aud as an array.
+func buildTestIDTokenArrAud(t *testing.T, iss string, aud []string, nonce string, exp int64) string {
+	t.Helper()
+	claims := map[string]any{
+		"iss":   iss,
+		"aud":   aud,
+		"sub":   "12345",
+		"nonce": nonce,
+		"exp":   exp,
+	}
+	return buildJWT(t, claims)
+}
+
+// buildTestIDTokenNoExp creates a JWT without the exp claim.
+func buildTestIDTokenNoExp(t *testing.T, iss, aud, nonce string) string {
+	t.Helper()
+	claims := map[string]any{
+		"iss":   iss,
+		"aud":   aud,
+		"sub":   "12345",
+		"nonce": nonce,
+	}
+	return buildJWT(t, claims)
+}
+
+func buildJWT(t *testing.T, payload map[string]any) string {
+	t.Helper()
 	header := map[string]any{"alg": "RS256", "typ": "JWT"}
-	payload := idTokenClaims{Iss: iss, Aud: aud, Nonce: nonce, Exp: exp, Sub: "12345"}
 
 	headerJSON, _ := json.Marshal(header)
 	payloadJSON, _ := json.Marshal(payload)

@@ -161,14 +161,17 @@ func (s *Services) OAuthCallback(ctx context.Context, provider, stateParam, code
 		return nil, domain.Err(502, "Failed to exchange authorization code")
 	}
 
-	// Validate ID token claims (iss, aud) if an ID token was returned (OIDC §3)
+	// Validate ID token claims (iss, aud, nonce, exp) if an ID token was returned (OIDC §3)
+	var idTokenSub string
 	if tokenResp.IDToken != "" {
-		if err := validateIDToken(tokenResp.IDToken, cfg, stored.Nonce); err != nil {
+		sub, err := validateIDToken(tokenResp.IDToken, cfg, stored.Nonce)
+		if err != nil {
 			if s.Logger != nil {
 				s.Logger.Error("OAuth ID token validation failed", "provider", provider, "error", err)
 			}
 			return nil, domain.Err(400, "ID token validation failed")
 		}
+		idTokenSub = sub
 	}
 
 	// Fetch user info from provider
@@ -182,6 +185,15 @@ func (s *Services) OAuthCallback(ctx context.Context, provider, stateParam, code
 
 	if userInfo.Subject == "" {
 		return nil, domain.Err(502, "Provider did not return subject identifier")
+	}
+
+	// Cross-validate sub between ID token and UserInfo (OIDC §3.1.3.7 — step 8)
+	if idTokenSub != "" && idTokenSub != userInfo.Subject {
+		if s.Logger != nil {
+			s.Logger.Error("OAuth sub mismatch between ID token and userinfo",
+				"provider", provider, "id_token_sub", idTokenSub, "userinfo_sub", userInfo.Subject)
+		}
+		return nil, domain.Err(400, "ID token subject does not match userinfo subject")
 	}
 
 	// Find or create user
@@ -461,78 +473,106 @@ func fetchUserInfo(ctx context.Context, cfg OAuthProviderConfig, accessToken str
 // --- Redirect URI allowlist ---
 
 // validateRedirectURI checks that the redirect_uri is in the provider's allowlist.
-// If the allowlist is empty (development), all URIs are accepted.
+// An empty allowlist is rejected unless AllowAllRedirectURIs is explicitly set
+// (development only — never enable in production).
 func validateRedirectURI(cfg OAuthProviderConfig, redirectURI string) error {
 	if redirectURI == "" {
 		return fmt.Errorf("redirect_uri is required")
 	}
+	if cfg.AllowAllRedirectURIs {
+		return nil // explicit dev-mode opt-in
+	}
 	if len(cfg.AllowedRedirectURIs) == 0 {
-		return nil // no allowlist configured — accept all (dev mode)
+		return fmt.Errorf("redirect_uri allowlist is empty — configure AllowedRedirectURIs or set AllowAllRedirectURIs for dev")
 	}
 	for _, allowed := range cfg.AllowedRedirectURIs {
 		if redirectURI == allowed {
 			return nil
 		}
 	}
-	return fmt.Errorf("redirect_uri not allowed: %s", redirectURI)
+	return fmt.Errorf("redirect_uri not allowed")
 }
 
 // --- OIDC ID token validation ---
 
 // idTokenClaims represents the OIDC claims we validate from an ID token.
 type idTokenClaims struct {
-	Iss   string `json:"iss"`   // issuer — must match cfg.IssuerURL
-	Aud   string `json:"aud"`   // audience — must match cfg.ClientID (single-audience check)
-	Sub   string `json:"sub"`   // subject identifier
-	Nonce string `json:"nonce"` // must match the nonce stored in oauth_states
-	Exp   int64  `json:"exp"`   // expiry — must not be in the past
+	Iss   string          `json:"iss"`   // issuer — must match cfg.IssuerURL
+	Aud   json.RawMessage `json:"aud"`   // audience — string or []string (OIDC §2)
+	Sub   string          `json:"sub"`   // subject identifier
+	Nonce string          `json:"nonce"` // must match the nonce stored in oauth_states
+	Exp   int64           `json:"exp"`   // expiry — required, must not be in the past (with leeway)
 }
 
 // validateIDToken performs lightweight validation of an OIDC ID token.
 // It decodes the JWT payload (unverified signature — signature verification
 // requires JWKS fetching which is deferred to a future iteration) and checks:
 //   - iss matches the configured IssuerURL
-//   - aud matches the configured ClientID
+//   - aud contains the configured ClientID (string or array, OIDC §2)
 //   - nonce matches the nonce from the authorize request
-//   - exp is not in the past
-func validateIDToken(idToken string, cfg OAuthProviderConfig, expectedNonce string) error {
+//   - exp is present and not in the past (with 60s clock skew leeway)
+//   - sub is returned for cross-validation with UserInfo (OIDC §3.1.3.7 step 8)
+func validateIDToken(idToken string, cfg OAuthProviderConfig, expectedNonce string) (sub string, err error) {
 	// JWT format: header.payload.signature — we only need the payload
 	parts := strings.SplitN(idToken, ".", 3)
 	if len(parts) != 3 {
-		return fmt.Errorf("malformed ID token: expected 3 parts, got %d", len(parts))
+		return "", fmt.Errorf("malformed ID token: expected 3 parts, got %d", len(parts))
 	}
 
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return fmt.Errorf("failed to decode ID token payload: %w", err)
+		return "", fmt.Errorf("failed to decode ID token payload: %w", err)
 	}
 
 	var claims idTokenClaims
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return fmt.Errorf("failed to parse ID token claims: %w", err)
+		return "", fmt.Errorf("failed to parse ID token claims: %w", err)
 	}
 
 	// Validate iss (OIDC §3.1.3.7 — step 2)
 	if cfg.IssuerURL != "" && claims.Iss != cfg.IssuerURL {
-		return fmt.Errorf("ID token iss %q does not match expected %q", claims.Iss, cfg.IssuerURL)
+		return "", fmt.Errorf("ID token iss %q does not match expected %q", claims.Iss, cfg.IssuerURL)
 	}
 
-	// Validate aud (OIDC §3.1.3.7 — step 3)
-	if claims.Aud != cfg.ClientID {
-		return fmt.Errorf("ID token aud %q does not match expected %q", claims.Aud, cfg.ClientID)
+	// Validate aud (OIDC §3.1.3.7 — step 3, aud can be string or []string)
+	if !audContains(claims.Aud, cfg.ClientID) {
+		return "", fmt.Errorf("ID token aud does not contain expected client_id %q", cfg.ClientID)
 	}
 
 	// Validate nonce (OIDC §3.1.3.7 — step 11)
 	if expectedNonce != "" && claims.Nonce != expectedNonce {
-		return fmt.Errorf("ID token nonce does not match")
+		return "", fmt.Errorf("ID token nonce does not match")
 	}
 
-	// Validate exp (OIDC §3.1.3.7 — step 9)
-	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
-		return fmt.Errorf("ID token expired")
+	// Validate exp (OIDC §3.1.3.7 — step 9) — exp is required, 60s leeway for clock skew
+	if claims.Exp == 0 {
+		return "", fmt.Errorf("ID token missing exp claim")
+	}
+	if time.Now().Unix()-60 > claims.Exp {
+		return "", fmt.Errorf("ID token expired")
 	}
 
-	return nil
+	return claims.Sub, nil
+}
+
+// audContains checks whether the aud claim (string or []string) contains the given clientID.
+func audContains(raw json.RawMessage, clientID string) bool {
+	// Try array first
+	var arr []string
+	if err := json.Unmarshal(raw, &arr); err == nil {
+		for _, a := range arr {
+			if a == clientID {
+				return true
+			}
+		}
+		return false
+	}
+	// Fallback to single string
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return false
+	}
+	return s == clientID
 }
 
 // --- Expired state cleanup ---

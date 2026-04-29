@@ -35,3 +35,5 @@ OAUTH_GOOGLE_USERINFO_URL=https://openidconnect.googleapis.com/v1/userinfo
 OAUTH_GOOGLE_ISSUER_URL=https://accounts.google.com
 # Comma-separated list of allowed redirect URIs (leave empty in dev to accept all):
 OAUTH_GOOGLE_ALLOWED_REDIRECT_URIS=http://localhost:3000/api/v1/auth/oauth/google/callback,http://localhost:5173/api/v1/auth/oauth/google/callback
+# Set to "true" to accept any redirect_uri (development only — NEVER in production):
+OAUTH_GOOGLE_ALLOW_ALL_REDIRECT_URIS=false
