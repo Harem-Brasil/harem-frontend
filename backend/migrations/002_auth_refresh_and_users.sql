@@ -45,6 +45,6 @@ CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_active
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_lookup
     ON refresh_tokens(token_id) WHERE revoked_at IS NULL;
 
--- Cleanup candidates: expired + revoked tokens (optional periodic DELETE)
+-- Cleanup candidates: all expired tokens (optional periodic DELETE)
 CREATE INDEX IF NOT EXISTS idx_refresh_tokens_cleanup
-    ON refresh_tokens(expires_at) WHERE revoked_at IS NOT NULL;
+    ON refresh_tokens(expires_at) WHERE expires_at < NOW();

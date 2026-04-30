@@ -410,12 +410,12 @@ func (s *Services) LogoutAll(ctx context.Context, user *middleware.UserClaims) e
 	return nil
 }
 
-// CleanupExpiredRefreshTokens removes revoked refresh tokens whose expires_at
-// has passed. Call periodically (e.g. via cron) to prevent table bloat.
-// Leverages idx_refresh_tokens_cleanup (expires_at WHERE revoked_at IS NOT NULL).
+// CleanupExpiredRefreshTokens removes refresh tokens whose expires_at has
+// passed, regardless of revocation status. Call periodically (e.g. via cron)
+// to prevent table bloat. Leverages idx_refresh_tokens_cleanup (expires_at).
 func (s *Services) CleanupExpiredRefreshTokens(ctx context.Context) (int64, error) {
 	tag, err := s.DB.Exec(ctx,
-		`DELETE FROM refresh_tokens WHERE revoked_at IS NOT NULL AND expires_at < NOW()`,
+		`DELETE FROM refresh_tokens WHERE expires_at < NOW()`,
 	)
 	if err != nil {
 		if s.Logger != nil {
