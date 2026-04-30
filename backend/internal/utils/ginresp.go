@@ -1,13 +1,37 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/harem-brasil/backend/internal/domain"
 )
+
+// BindStrictJSON decodes JSON from the request body into dest, rejecting unknown fields.
+func BindStrictJSON(c *gin.Context, dest any) error {
+	dec := json.NewDecoder(c.Request.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dest); err != nil {
+		return err
+	}
+	return nil
+}
+
+// IsSyntaxOrUnknownField reports whether a JSON decode error is due to malformed
+// syntax, an unknown field, an unexpected EOF, or a type mismatch.
+func IsSyntaxOrUnknownField(err error) bool {
+	if err == nil {
+		return false
+	}
+	var synErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	return errors.As(err, &synErr) || errors.As(err, &typeErr) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(err.Error(), "unknown field")
+}
 
 // RespondProblem envia application/problem+json (RFC 7807).
 func RespondProblem(c *gin.Context, status int, title, detail string) {

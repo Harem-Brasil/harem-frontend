@@ -67,8 +67,16 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 	{
 		authPublic.POST("/auth/register", func(c *gin.Context) {
 			var req domain.RegisterRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+			if err := utils.BindStrictJSON(c, &req); err != nil {
+				msg := "Invalid JSON"
+				if utils.IsSyntaxOrUnknownField(err) {
+					msg = "Invalid JSON or unexpected fields"
+				}
+				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), msg)
+				return
+			}
+			if fieldErrors, ok := req.Validate(); !ok {
+				utils.RespondValidation(c, "Validation failed", fieldErrors)
 				return
 			}
 			meta := &services.SessionMeta{
@@ -84,8 +92,16 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 		})
 		authPublic.POST("/auth/login", func(c *gin.Context) {
 			var req domain.LoginRequest
-			if err := c.ShouldBindJSON(&req); err != nil {
-				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+			if err := utils.BindStrictJSON(c, &req); err != nil {
+				msg := "Invalid JSON"
+				if utils.IsSyntaxOrUnknownField(err) {
+					msg = "Invalid JSON or unexpected fields"
+				}
+				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), msg)
+				return
+			}
+			if fieldErrors, ok := req.Validate(); !ok {
+				utils.RespondValidation(c, "Validation failed", fieldErrors)
 				return
 			}
 			meta := &services.SessionMeta{

@@ -33,6 +33,20 @@ Funcionalidade: Endpoints de Autenticação
     Então o código de status da resposta deve ser 400
     E a resposta deve conter erro de validação para "email"
 
+  Cenário: Registrar com campo não whitelist deve ser rejeitado
+    Quando eu enviar uma requisição POST para "/api/v1/auth/register" com:
+      | screen_name | email             | password     | role  |
+      | johndoe  | john@example.com  | SecurePass123! | admin |
+    Então o código de status da resposta deve ser 400
+    E a resposta deve conter "error"
+
+  Cenário: Login com campo não whitelist deve ser rejeitado
+    Quando eu enviar uma requisição POST para "/api/v1/auth/login" com:
+      | email             | password         | extra_field |
+      | user@example.com  | SecurePass123!   | value       |
+    Então o código de status da resposta deve ser 400
+    E a resposta deve conter "error"
+
   Cenário: Login com credenciais válidas
     Dado que um usuário registrado com email "user@example.com" e senha "SecurePass123!"
     Quando eu enviar uma requisição POST para "/api/v1/auth/login" com:
