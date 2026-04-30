@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/harem-brasil/backend/internal/domain"
 )
+
+// BindStrictJSON decodes JSON from the request body into dest, rejecting unknown fields.
+func BindStrictJSON(c *gin.Context, dest any) error {
+	dec := json.NewDecoder(c.Request.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dest); err != nil {
+		return err
+	}
+	return nil
+}
 
 // RespondProblem envia application/problem+json (RFC 7807).
 func RespondProblem(c *gin.Context, status int, title, detail string) {

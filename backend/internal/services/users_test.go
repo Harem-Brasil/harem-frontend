@@ -132,12 +132,11 @@ func TestUpdateMe_CannotPatchOtherUser(t *testing.T) {
 }
 
 func TestPatchMeRequest_WhitelistRejectsExtraFields(t *testing.T) {
-	// Gin's ShouldBindJSON with a struct ignores unknown fields by default.
-	// The PatchMeRequest struct only has whitelisted fields.
-	// If a client sends {"role": "admin"}, it is silently ignored.
-	// For strict rejection, we would need custom disallow logic.
-	// The OpenAPI spec marks additionalProperties: false.
-	t.Log("Extra fields in JSON are ignored by Go struct binding; OpenAPI declares additionalProperties: false")
+	// Handlers for register/login use BindStrictJSON (DisallowUnknownFields)
+	// which rejects unknown fields with 400. PATCH /me uses ShouldBindJSON
+	// and silently ignores extra fields — the OpenAPI spec marks
+	// additionalProperties: false for PatchMeRequest as well.
+	t.Log("Extra fields in JSON are rejected by strict binding on auth routes; PATCH /me uses standard binding")
 }
 
 // --- helpers ---
