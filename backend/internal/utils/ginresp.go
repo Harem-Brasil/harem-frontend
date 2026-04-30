@@ -3,8 +3,10 @@ package utils
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/harem-brasil/backend/internal/domain"
@@ -18,6 +20,17 @@ func BindStrictJSON(c *gin.Context, dest any) error {
 		return err
 	}
 	return nil
+}
+
+// IsSyntaxOrUnknownField reports whether a JSON decode error is due to malformed
+// syntax, an unknown field, an unexpected EOF, or a type mismatch.
+func IsSyntaxOrUnknownField(err error) bool {
+	if err == nil {
+		return false
+	}
+	var synErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	return errors.As(err, &synErr) || errors.As(err, &typeErr) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(err.Error(), "unknown field")
 }
 
 // RespondProblem envia application/problem+json (RFC 7807).

@@ -1,12 +1,10 @@
 package controllers
 
 import (
-	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -16,12 +14,6 @@ import (
 	"github.com/harem-brasil/backend/internal/services"
 	"github.com/harem-brasil/backend/internal/utils"
 )
-
-func isSyntaxOrUnknownField(err error) bool {
-	var synErr *json.SyntaxError
-	var typeErr *json.UnmarshalTypeError
-	return errors.As(err, &synErr) || errors.As(err, &typeErr) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || strings.Contains(err.Error(), "unknown field")
-}
 
 // RegisterRoutes define todos os endpoints REST sobre Gin (routing + binding + controllers finos).
 func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte, logger *slog.Logger, rdb *redis.Client) {
@@ -76,11 +68,15 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 		authPublic.POST("/auth/register", func(c *gin.Context) {
 			var req domain.RegisterRequest
 			if err := utils.BindStrictJSON(c, &req); err != nil {
-				if isSyntaxOrUnknownField(err) {
-					utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON or unexpected fields")
-				} else {
-					utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+				msg := "Invalid JSON"
+				if utils.IsSyntaxOrUnknownField(err) {
+					msg = "Invalid JSON or unexpected fields"
 				}
+				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), msg)
+				return
+			}
+			if fieldErrors, ok := req.Validate(); !ok {
+				utils.RespondValidation(c, "Validation failed", fieldErrors)
 				return
 			}
 			meta := &services.SessionMeta{
@@ -97,11 +93,15 @@ func RegisterRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte
 		authPublic.POST("/auth/login", func(c *gin.Context) {
 			var req domain.LoginRequest
 			if err := utils.BindStrictJSON(c, &req); err != nil {
-				if isSyntaxOrUnknownField(err) {
-					utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON or unexpected fields")
-				} else {
-					utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+				msg := "Invalid JSON"
+				if utils.IsSyntaxOrUnknownField(err) {
+					msg = "Invalid JSON or unexpected fields"
 				}
+				utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), msg)
+				return
+			}
+			if fieldErrors, ok := req.Validate(); !ok {
+				utils.RespondValidation(c, "Validation failed", fieldErrors)
 				return
 			}
 			meta := &services.SessionMeta{

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/harem-brasil/backend/internal/utils"
 )
 
 func TestIsSyntaxOrUnknownField(t *testing.T) {
@@ -61,9 +63,9 @@ func TestIsSyntaxOrUnknownField(t *testing.T) {
 			dec.DisallowUnknownFields()
 			err := dec.Decode(tt.into)
 			if err != nil {
-				got := isSyntaxOrUnknownField(err)
+				got := utils.IsSyntaxOrUnknownField(err)
 				if got != tt.want {
-					t.Errorf("isSyntaxOrUnknownField() = %v, want %v for error: %v", got, tt.want, err)
+					t.Errorf("IsSyntaxOrUnknownField() = %v, want %v for error: %v", got, tt.want, err)
 				}
 			} else if tt.want {
 				t.Fatalf("expected decode error")
