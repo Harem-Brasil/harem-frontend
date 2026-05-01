@@ -43,7 +43,7 @@ pipeline {
     REDIS_URL       = credentials('harem-brasil-redis-url')
     JWT_SECRET=credentials('harem-brasil-jwt-secret')
     STRIPE_SECRET_KEY=credentials('harem-brasil-stripe-secret-key')
-    CLOUDFLARE_API_TOKEN=credentials('harem-brasil-cloudflare-token')
+    CLOUDFLARE_API_TOKEN=credentials('truvis-co-cloudflare-api-token')
 
     // Staging Secrets - configure no Jenkins Credentials
     STAGE_DATABASE_URL    = credentials('harem-brasil-database-url-stage')
