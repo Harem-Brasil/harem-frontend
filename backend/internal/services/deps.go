@@ -3,6 +3,7 @@ package services
 import (
 	"log/slog"
 
+	"github.com/harem-brasil/backend/internal/realtime"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -24,4 +25,6 @@ type Dependencies struct {
 	AppEnv string
 	// PlatformCommissionBasisPoints comissão da plataforma sobre pedidos pagos do catálogo (0–10000). Predefinido em composition root (ex.: 1500 = 15%).
 	PlatformCommissionBasisPoints int
+	// RealtimePublisher hub WS (HB-EPIC-04); nil usa noop até existir implementação.
+	RealtimePublisher realtime.Publisher
 }

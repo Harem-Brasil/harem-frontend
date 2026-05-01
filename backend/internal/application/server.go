@@ -11,6 +11,7 @@ import (
 	"github.com/harem-brasil/backend/internal/controllers"
 	"github.com/harem-brasil/backend/internal/datasources"
 	httpmw "github.com/harem-brasil/backend/internal/middleware"
+	"github.com/harem-brasil/backend/internal/realtime"
 	"github.com/harem-brasil/backend/internal/services"
 )
 
@@ -42,17 +43,18 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 	}
 
 	svc := services.New(services.Dependencies{
-		DB:                       db,
-		Redis:                    rdb,
-		JWTSecret:                []byte(cfg.JWTSecret),
-		Logger:                   cfg.Logger,
-		MaxFileSize:              cfg.MaxFileSize,
-		StripeWebhookSecret:      cfg.StripeWebhookSecret,
-		PagSeguroWebhookSecret:   cfg.PagSeguroWebhookSecret,
-		MercadoPagoWebhookSecret: cfg.MercadoPagoWebhookSecret,
+		DB:                            db,
+		Redis:                         rdb,
+		JWTSecret:                     []byte(cfg.JWTSecret),
+		Logger:                        cfg.Logger,
+		MaxFileSize:                   cfg.MaxFileSize,
+		StripeWebhookSecret:           cfg.StripeWebhookSecret,
+		PagSeguroWebhookSecret:        cfg.PagSeguroWebhookSecret,
+		MercadoPagoWebhookSecret:      cfg.MercadoPagoWebhookSecret,
 		InternalBillingSecret:         cfg.InternalBillingSecret,
 		AppEnv:                        cfg.AppEnv,
 		PlatformCommissionBasisPoints: cfg.PlatformCommissionBPS,
+		RealtimePublisher:             realtime.NoopPublisher{},
 	})
 
 	corsOrigins := cfg.CORSAllowedOrigins
