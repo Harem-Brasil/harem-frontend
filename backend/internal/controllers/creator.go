@@ -48,6 +48,7 @@ func CreatorRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte,
 	{
 		creator.POST("/creator/apply", postCreatorApply(svc, logger))
 		creator.GET("/creator/dashboard", getCreatorDashboard(svc, logger))
+		creator.GET("/creator/earnings/summary", getCreatorEarningsSummary(svc, logger))
 		creator.GET("/creator/earnings", getCreatorEarnings(svc, logger))
 		creator.POST("/creator/catalog", postCreatorCatalogItem(svc, logger))
 		creator.GET("/creator/catalog", getCreatorCatalog(svc, logger))
@@ -97,6 +98,24 @@ func getCreatorEarnings(svc *services.Services, logger *slog.Logger) gin.Handler
 			return
 		}
 		utils.RespondJSON(c, http.StatusOK, m)
+	}
+}
+
+func getCreatorEarningsSummary(svc *services.Services, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		from := strings.TrimSpace(c.Query("from"))
+		to := strings.TrimSpace(c.Query("to"))
+		if utf8.RuneCountInString(from) > services.MaxEarningsQueryParamLen || utf8.RuneCountInString(to) > services.MaxEarningsQueryParamLen {
+			utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "query parameter too long")
+			return
+		}
+		u := httpmw.MustUserClaims(c)
+		resp, err := svc.GetCreatorEarningsSummary(c.Request.Context(), u, from, to)
+		if err != nil {
+			utils.HandleServiceError(c, logger, err)
+			return
+		}
+		utils.RespondJSON(c, http.StatusOK, resp)
 	}
 }
 

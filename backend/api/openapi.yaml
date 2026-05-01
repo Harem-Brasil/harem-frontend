@@ -109,6 +109,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
+  /api/v1/creator/earnings/summary:
+    get:
+      operationId: getCreatorEarningsSummary
+      tags: [Criador]
+      security:
+        - bearerAuth: []
+      summary: Sumário agregado de ganhos (catálogo)
+      description: |
+        Agrega valores de pedidos com pagamento confirmado (`paid`, `fulfilled`) por moeda no intervalo `[from, to)` em UTC.
+        A comissão da plataforma aplica-se sobre o bruto (`PLATFORM_COMMISSION_BPS`, predefinição 1500 = 15%).
+        Não devolve compradores nem IDs de pedidos — apenas totais. BOLA: só o criador autenticado acede aos seus dados (`creator_id`).
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 48
+          description: |
+            Limite inferior inclusivo. Data `YYYY-MM-DD` (UTC) ou instante RFC3339.
+            Deve ser enviado em conjunto com `to`, ou ambos omitidos (últimos 30 dias até ao instante atual).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 48
+          description: |
+            Limite superior exclusivo. Para só data `YYYY-MM-DD`, corresponde ao fim desse dia civil em UTC (implementado como meia-noite do dia seguinte).
+            Para RFC3339, o instante é exclusivo — intervalo semiaberto `[from, to)`.
+      responses:
+        "200":
+          description: Totais por moeda
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorEarningsSummaryResponse"
+              examples:
+                oneCurrency:
+                  summary: Uma moeda
+                  value:
+                    period_from: "2026-04-01T00:00:00Z"
+                    period_to_exclusive: "2026-05-01T00:00:00Z"
+                    platform_commission_basis_points: 1500
+                    summaries:
+                      - currency: BRL
+                        gross_cents: 10000
+                        platform_fee_cents: 1500
+                        net_cents: 8500
+                        paid_orders_count: 3
+        "400":
+          description: Intervalo inválido, mistura from/to, ou período superior a 366 dias
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Não autenticado
+        "403":
+          description: Papel insuficiente (requer creator ou admin)
+
   /api/v1/creator/catalog:
     get:
       operationId: listCreatorCatalog
@@ -478,6 +539,57 @@ components:
           items:
             type: string
             maxLength: 2048
+
+    CreatorEarningsSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [period_from, period_to_exclusive, platform_commission_basis_points, summaries]
+      properties:
+        period_from:
+          type: string
+          format: date-time
+          description: Limite inferior inclusivo aplicado (RFC3339 UTC)
+        period_to_exclusive:
+          type: string
+          format: date-time
+          description: Limite superior exclusivo aplicado (RFC3339 UTC)
+        platform_commission_basis_points:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Comissão da plataforma em basis points (ex. 1500 = 15%)
+        summaries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorEarningsCurrencySummary"
+
+    CreatorEarningsCurrencySummary:
+      type: object
+      additionalProperties: false
+      required:
+        [currency, gross_cents, platform_fee_cents, net_cents, paid_orders_count]
+      properties:
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          description: ISO 4217
+        gross_cents:
+          type: integer
+          format: int64
+          minimum: 0
+        platform_fee_cents:
+          type: integer
+          format: int64
+          minimum: 0
+        net_cents:
+          type: integer
+          format: int64
+          minimum: 0
+        paid_orders_count:
+          type: integer
+          format: int64
+          minimum: 0
 
     CreatorCatalogPatchRequest:
       type: object

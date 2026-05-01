@@ -26,4 +26,5 @@ type Config struct {
 	MercadoPagoWebhookSecret string
 	InternalBillingSecret    string
 	AppEnv                   string
+	PlatformCommissionBPS    int
 }

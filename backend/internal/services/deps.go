@@ -22,4 +22,6 @@ type Dependencies struct {
 	InternalBillingSecret string
 	// AppEnv replica ENV (ex.: development, test, production); usado quando o segredo do webhook está vazio.
 	AppEnv string
+	// PlatformCommissionBasisPoints comissão da plataforma sobre pedidos pagos do catálogo (0–10000). Predefinido em composition root (ex.: 1500 = 15%).
+	PlatformCommissionBasisPoints int
 }

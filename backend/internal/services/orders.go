@@ -365,7 +365,7 @@ func (s *Services) ApplyBillingPaidCatalogOrder(ctx context.Context, orderID, pa
 	var createdAt, updatedAt time.Time
 	err = s.DB.QueryRow(ctx,
 		`UPDATE creator_orders
-		 SET status = $2, billing_payment_ref = $3, updated_at = NOW()
+		 SET status = $2, billing_payment_ref = $3, paid_at = NOW(), updated_at = NOW()
 		 WHERE id = $1::uuid AND status = $4
 		 RETURNING id::text, creator_id::text, buyer_id::text, item_id::text, status, amount_cents, currency, created_at, updated_at`,
 		orderID, domain.OrderStatusPaid, paymentRef, domain.OrderStatusAwaitingPayment,

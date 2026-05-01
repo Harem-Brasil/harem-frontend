@@ -50,8 +50,9 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 		StripeWebhookSecret:      cfg.StripeWebhookSecret,
 		PagSeguroWebhookSecret:   cfg.PagSeguroWebhookSecret,
 		MercadoPagoWebhookSecret: cfg.MercadoPagoWebhookSecret,
-		InternalBillingSecret:    cfg.InternalBillingSecret,
-		AppEnv:                   cfg.AppEnv,
+		InternalBillingSecret:         cfg.InternalBillingSecret,
+		AppEnv:                        cfg.AppEnv,
+		PlatformCommissionBasisPoints: cfg.PlatformCommissionBPS,
 	})
 
 	corsOrigins := cfg.CORSAllowedOrigins

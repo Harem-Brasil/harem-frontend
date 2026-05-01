@@ -440,6 +440,11 @@ GET {{baseUrl}}/api/v1/creator/earnings
 Authorization: Bearer {{login.response.body.$.access_token}}
 Accept: application/json
 
+### Ganhos — sumário agregado por período (query opcional from= & to= ; datas YYYY-MM-DD ou RFC3339 UTC)
+GET {{baseUrl}}/api/v1/creator/earnings/summary?from=2026-01-01&to=2026-02-01
+Authorization: Bearer {{login.response.body.$.access_token}}
+Accept: application/json
+
 # Verificação após criar: (1) POST abaixo deve responder 201 com campo "id".
 # (2) Envie «Catálogo — listar» — em "data" deve aparecer o mesmo title/price_cents.
 # (3) PATCH/DELETE usam o id do POST via {{createCatalogItem.response.body.$.id}} (execute o POST primeiro nesta sessão).

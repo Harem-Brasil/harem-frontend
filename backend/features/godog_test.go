@@ -113,12 +113,13 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 
 func theAPIIsRunning() error {
 	cfg := application.Config{
-		Port:      "40080",
-		DBURL:     os.Getenv("DATABASE_URL"),
-		RedisURL:  os.Getenv("REDIS_URL"),
-		JWTSecret: "test-jwt-secret-that-is-long-enough-for-tests-32chars",
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		AppEnv:    "test",
+		Port:                  "40080",
+		DBURL:                 os.Getenv("DATABASE_URL"),
+		RedisURL:              os.Getenv("REDIS_URL"),
+		JWTSecret:             "test-jwt-secret-that-is-long-enough-for-tests-32chars",
+		Logger:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AppEnv:                "test",
+		PlatformCommissionBPS: 1500,
 	}
 	if cfg.DBURL == "" {
 		cfg.DBURL = "postgres://harem:harem@localhost:5432/harem?sslmode=disable"

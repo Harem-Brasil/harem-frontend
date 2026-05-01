@@ -30,6 +30,13 @@ Funcionalidade: Endpoints de Criador
     E a resposta deve conter "earnings"
     E a resposta deve conter "total"
 
+  Cenário: Sumário agregado de ganhos por período
+    Quando eu enviar uma requisição GET para "/api/v1/creator/earnings/summary"
+    Então o código de status da resposta deve ser 200
+    E a resposta deve conter "summaries"
+    E a resposta deve conter "period_from"
+    E a resposta deve conter "platform_commission_basis_points"
+
   Cenário: Obter catálogo do criador
     Quando eu enviar uma requisição GET para "/api/v1/creator/catalog"
     Então o código de status da resposta deve ser 200
