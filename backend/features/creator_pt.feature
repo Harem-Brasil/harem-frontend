@@ -37,6 +37,20 @@ Funcionalidade: Endpoints de Criador
     E a resposta deve conter "next_cursor"
     E a resposta deve conter "has_more"
 
+  Cenário: Criar item no catálogo
+    Quando eu enviar uma requisição POST para "/api/v1/creator/catalog" com:
+      | title | description | price_cents | currency | visibility |
+      | Pack  | Descrição   | 990         | BRL      | public     |
+    Então o código de status da resposta deve ser 201
+    E a resposta deve conter "id"
+    E a resposta deve conter "price_cents" com valor "990"
+
+  Cenário: Patch de item inexistente devolve 404
+    Quando eu enviar uma requisição PATCH para "/api/v1/creator/catalog/550e8400-e29b-41d4-a716-446655440000" com:
+      | title     |
+      | Qualquer  |
+    Então o código de status da resposta deve ser 404
+
   Cenário: Obter catálogo do criador com paginação
     Quando eu enviar uma requisição GET para "/api/v1/creator/catalog?limit=5&cursor=item-abc"
     Então o código de status da resposta deve ser 200

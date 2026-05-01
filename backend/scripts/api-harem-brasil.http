@@ -407,11 +407,44 @@ GET {{baseUrl}}/api/v1/creator/earnings
 Authorization: Bearer {{login.response.body.$.access_token}}
 Accept: application/json
 
-### Catálogo (somente leitura — não há POST nesta API para criar itens; popular creator_catalog via SQL/migração/checkout futuro)
-# cursor vazio = primeira página. Para próxima página use next_cursor da resposta (RFC3339, ex.: 2026-04-30T20:13:42Z). Cursor malformado → 400.
+# Verificação após criar: (1) POST abaixo deve responder 201 com campo "id".
+# (2) Envie «Catálogo — listar» — em "data" deve aparecer o mesmo title/price_cents.
+# (3) PATCH/DELETE usam o id do POST via {{createCatalogItem.response.body.$.id}} (execute o POST primeiro nesta sessão).
+
+### Catálogo — criar item (whitelist title, description, price_cents, currency, visibility, media)
+# @name createCatalogItem
+POST {{baseUrl}}/api/v1/creator/catalog
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+{
+  "title": "Pack exclusivo",
+  "description": "Descrição pública do item.",
+  "price_cents": 2990,
+  "currency": "BRL",
+  "visibility": "subscribers",
+  "media": ["https://cdn.example.com/capa.jpg"]
+}
+
+### Catálogo — listar (cursor vazio = 1ª página; next_cursor = RFC3339)
 GET {{baseUrl}}/api/v1/creator/catalog?cursor=
 Authorization: Bearer {{login.response.body.$.access_token}}
 Accept: application/json
+
+### Catálogo — atualizar item (usa o id devolvido pelo POST «createCatalogItem» acima)
+PATCH {{baseUrl}}/api/v1/creator/catalog/{{createCatalogItem.response.body.$.id}}
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.access_token}}
+
+{
+  "price_cents": 3490,
+  "visibility": "premium"
+}
+
+### Catálogo — remover item (204 = linha apagada na BD)
+# Se existirem pedidos (creator_orders) a referenciar o item, a API responde 409 Conflict (FK).
+DELETE {{baseUrl}}/api/v1/creator/catalog/{{createCatalogItem.response.body.$.id}}
+Authorization: Bearer {{login.response.body.$.access_token}}
 
 ### Pedidos (somente leitura — pedidos nascem do fluxo de compra; não há POST dedicado nesta API)
 GET {{baseUrl}}/api/v1/creator/orders?cursor=

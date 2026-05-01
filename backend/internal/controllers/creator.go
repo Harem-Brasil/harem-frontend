@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 
 	"github.com/harem-brasil/backend/internal/domain"
 	httpmw "github.com/harem-brasil/backend/internal/middleware"
@@ -48,7 +49,10 @@ func CreatorRoutes(engine *gin.Engine, svc *services.Services, jwtSecret []byte,
 		creator.POST("/creator/apply", postCreatorApply(svc, logger))
 		creator.GET("/creator/dashboard", getCreatorDashboard(svc, logger))
 		creator.GET("/creator/earnings", getCreatorEarnings(svc, logger))
+		creator.POST("/creator/catalog", postCreatorCatalogItem(svc, logger))
 		creator.GET("/creator/catalog", getCreatorCatalog(svc, logger))
+		creator.PATCH("/creator/catalog/:item_id", patchCreatorCatalogItem(svc, logger))
+		creator.DELETE("/creator/catalog/:item_id", deleteCreatorCatalogItem(svc, logger))
 		creator.GET("/creator/orders", getCreatorOrders(svc, logger))
 		creator.PATCH("/creator/profile", patchCreatorProfile(svc, logger))
 	}
@@ -134,6 +138,67 @@ func getCreatorOrders(svc *services.Services, logger *slog.Logger) gin.HandlerFu
 			return
 		}
 		utils.RespondJSON(c, http.StatusOK, page)
+	}
+}
+
+func postCreatorCatalogItem(svc *services.Services, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req domain.CreatorCatalogCreateRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			if logger != nil {
+				logger.Warn("creator catalog create validation failed", "path", c.FullPath())
+			}
+			utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+			return
+		}
+		u := httpmw.MustUserClaims(c)
+		item, err := svc.CreateCreatorCatalogItem(c.Request.Context(), u, req)
+		if err != nil {
+			utils.HandleServiceError(c, logger, err)
+			return
+		}
+		utils.RespondJSON(c, http.StatusCreated, item)
+	}
+}
+
+func patchCreatorCatalogItem(svc *services.Services, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rawID := strings.TrimSpace(c.Param("item_id"))
+		if _, err := uuid.Parse(rawID); err != nil {
+			utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid item id")
+			return
+		}
+		var req domain.CreatorCatalogPatchRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			if logger != nil {
+				logger.Warn("creator catalog patch validation failed", "path", c.FullPath())
+			}
+			utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid JSON")
+			return
+		}
+		u := httpmw.MustUserClaims(c)
+		item, err := svc.PatchCreatorCatalogItem(c.Request.Context(), u, rawID, req)
+		if err != nil {
+			utils.HandleServiceError(c, logger, err)
+			return
+		}
+		utils.RespondJSON(c, http.StatusOK, item)
+	}
+}
+
+func deleteCreatorCatalogItem(svc *services.Services, logger *slog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rawID := strings.TrimSpace(c.Param("item_id"))
+		if _, err := uuid.Parse(rawID); err != nil {
+			utils.RespondProblem(c, http.StatusBadRequest, http.StatusText(http.StatusBadRequest), "Invalid item id")
+			return
+		}
+		u := httpmw.MustUserClaims(c)
+		if err := svc.DeleteCreatorCatalogItem(c.Request.Context(), u, rawID); err != nil {
+			utils.HandleServiceError(c, logger, err)
+			return
+		}
+		c.Status(http.StatusNoContent)
 	}
 }
 

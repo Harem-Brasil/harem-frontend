@@ -96,7 +96,8 @@ func (s *Services) GetCreatorCatalog(ctx context.Context, user *middleware.UserC
 	limit := 20
 
 	rows, err := s.DB.Query(ctx,
-		`SELECT id, title, description, price_cents, currency, visibility, created_at 
+		`SELECT id::text, title, description, price_cents, currency, visibility,
+		        COALESCE(media_urls, '{}'), created_at, updated_at
 		 FROM creator_catalog 
 		 WHERE creator_id = $1::uuid AND deleted_at IS NULL
 		 AND ($2::text = '' OR created_at < $2::timestamptz)
@@ -111,12 +112,17 @@ func (s *Services) GetCreatorCatalog(ctx context.Context, user *middleware.UserC
 	var items []any
 	for rows.Next() {
 		var item domain.CreatorCatalogItem
-		var createdAt time.Time
-		err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.PriceCents, &item.Currency, &item.Visibility, &createdAt)
+		var createdAt, updatedAt time.Time
+		err := rows.Scan(&item.ID, &item.Title, &item.Description, &item.PriceCents, &item.Currency, &item.Visibility,
+			&item.Media, &createdAt, &updatedAt)
 		if err != nil {
 			continue
 		}
 		item.CreatedAt = utils.FormatRFC3339UTC(createdAt)
+		item.UpdatedAt = utils.FormatRFC3339UTC(updatedAt)
+		if item.Media == nil {
+			item.Media = []string{}
+		}
 		items = append(items, item)
 	}
 
