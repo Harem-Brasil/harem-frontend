@@ -29,6 +29,7 @@ pipeline {
     FRONTEND_STAGE_NAME   = 'harembrasil-frontend-stage'
 
     // --- TEMPORARY INFRASTRUCTURE (for develop branch) ---
+    // Using staging secrets but deploying to temporary host
     TEMP_TARGET_HOST     = 'web1'
     TEMP_TARGET_DIR      = '/var/www/vhosts/api-temp.harembrasil.com.br'
     TEMP_SERVICE_NAME    = 'harem-api-temp'
@@ -49,12 +50,6 @@ pipeline {
     STAGE_REDIS_URL       = credentials('harem-brasil-redis-url-stage')
     STAGE_JWT_SECRET=credentials('harem-brasil-jwt-secret-stage')
     STAGE_STRIPE_SECRET_KEY=credentials('harem-brasil-stripe-secret-key-stage')
-
-    // Temporary Infrastructure Secrets - configure no Jenkins Credentials
-    TEMP_DATABASE_URL    = credentials('harem-brasil-database-url-temp')
-    TEMP_REDIS_URL       = credentials('harem-brasil-redis-url-temp')
-    TEMP_JWT_SECRET=credentials('harem-brasil-jwt-secret-temp')
-    TEMP_STRIPE_SECRET_KEY=credentials('harem-brasil-stripe-secret-key-temp')
   }
 
   stages {
@@ -293,7 +288,7 @@ BIN_LOCAL="artifacts/harem-api-linux-amd64"
 # Criar arquivo .env localmente
 COMMIT=$(git rev-parse --short HEAD)
 printf 'PORT=%s\\nENV=temp\\nCOMMIT_HASH=%s\\nDATABASE_URL=%s\\nREDIS_URL=%s\\nJWT_SECRET=%s\\nSTRIPE_SECRET_KEY=%s\\n' \\
-  "$TEMP_PORT" "$COMMIT" "$TEMP_DATABASE_URL" "$TEMP_REDIS_URL" "$TEMP_JWT_SECRET" "$TEMP_STRIPE_SECRET_KEY" > /tmp/harem-api-temp.env
+  "$TEMP_PORT" "$COMMIT" "$STAGE_DATABASE_URL" "$STAGE_REDIS_URL" "$STAGE_JWT_SECRET" "$STAGE_STRIPE_SECRET_KEY" > /tmp/harem-api-temp.env
 
 # Upload arquivos para /tmp no target
 scp "$BIN_LOCAL" ${TEMP_TARGET_HOST}:/tmp/harem-api-temp
