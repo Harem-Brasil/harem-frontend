@@ -33,7 +33,7 @@ pipeline {
     DEVELOP_TARGET_DIR      = '/var/www/vhosts/api-develop.harembrasil.com.br'
     DEVELOP_SERVICE_NAME    = 'harem-api-develop'
     DEVELOP_SERVICE_USER    = 'grimlock'
-    DEVELOP_PORT            = '40082'
+    DEVELOP_PORT            = '41082'
     DEVELOP_API_URL         = 'https://api-develop.harembrasil.com.br'
     DEVELOP_FRONTEND_DIR    = '/var/www/vhosts/develop.harembrasil.com.br'
     FRONTEND_DEVELOP_NAME   = 'harembrasil-frontend-develop'
