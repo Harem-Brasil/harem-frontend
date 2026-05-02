@@ -431,7 +431,7 @@ REMOTE
           fi
 
           echo "=== Validate frontend deploy (VPS file check) ==="
-          REMOTE_COMMIT=$(ssh -q ${DEVELOP_TARGET_HOST} <<'VPSCHECK'
+          REMOTE_COMMIT=$(ssh -q ${DEVELOP_TARGET_HOST} <<'VPSCHECK' | tail -1
 grep -o 'commit-hash" content="[^"]*"' /var/www/vhosts/develop.harembrasil.com.br/index.html | cut -d'"' -f3 || echo NOT_FOUND
 VPSCHECK
           )
