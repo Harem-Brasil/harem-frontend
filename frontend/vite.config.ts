@@ -21,15 +21,19 @@ function envMetaPlugin(): Plugin {
         return replaceVars(html)
       }
     },
+    // Run BEFORE the Cloudflare plugin's middleware (which uses the post-hook pattern).
+    // Rewrites SPA routes (e.g. /home) to '/' so Vite serves index.html correctly.
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url === '/' || req.url === '/index.html') {
-          const _end = res.end.bind(res)
-          let html = ''
-          res.end = function(chunk: any, ...args: any[]) {
-            if (chunk) html += chunk.toString()
-            return _end(Buffer.from(replaceVars(html)), ...args)
-          }
+      server.middlewares.use((req, _res, next) => {
+        const url = req.url ?? ''
+        if (
+          req.method === 'GET' &&
+          !url.startsWith('/api') &&
+          !url.startsWith('/@') &&
+          !url.startsWith('/__') &&
+          !url.includes('.')
+        ) {
+          req.url = '/'
         }
         next()
       })
@@ -39,6 +43,7 @@ function envMetaPlugin(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  appType: 'spa',
   plugins: [envMetaPlugin(), react(), tailwindcss(), cloudflare()],
   server: {
     proxy: {

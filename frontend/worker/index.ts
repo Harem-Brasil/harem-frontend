@@ -27,12 +27,22 @@ export default {
     }
 
     let res: Response;
+
     if (env.ASSETS) {
+      // Production / wrangler dev: ASSETS binding serves static files with SPA fallback
       res = await env.ASSETS.fetch(request);
+      if (res.status === 404) {
+        const indexUrl = new URL('/', url.origin);
+        res = await env.ASSETS.fetch(new Request(indexUrl.toString()));
+      }
     } else {
-      res = new Response('Not found', { status: 404 });
+      // Vite dev mode: ASSETS is not injected — proxy back to Vite's own server at '/'
+      // which serves index.html, letting the React SPA handle routing client-side.
+      const indexUrl = new URL('/', url.origin);
+      res = await fetch(new Request(indexUrl.toString(), { headers: request.headers }));
     }
-    // Clone response to add custom headers (SPA HTML and API responses)
+
+    // Clone response to add custom headers
     const modified = new Response(res.body, {
       status: res.status,
       statusText: res.statusText,
@@ -45,3 +55,4 @@ export default {
     return modified;
   },
 } satisfies ExportedHandler<WorkerEnv>;
+
