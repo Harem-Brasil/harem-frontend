@@ -377,12 +377,15 @@ SERVICEFILE
         unstash 'frontend-dist'
         sh label: 'Deploy frontend to develop (VPS)', script: '''
 set -euo pipefail
-FRONTEND_LOCAL="artifacts/frontend-dist"
+FRONTEND_LOCAL="artifacts/frontend-dist/client"
 
 # Criar diretório no target
 ssh ${DEVELOP_TARGET_HOST} "sudo mkdir -p ${DEVELOP_FRONTEND_DIR}"
 
-# Upload arquivos
+# Limpar conteúdo anterior
+ssh ${DEVELOP_TARGET_HOST} "sudo rm -rf ${DEVELOP_FRONTEND_DIR}/*"
+
+# Upload arquivos estáticos (index.html, assets/, etc.)
 scp -r "$FRONTEND_LOCAL"/* ${DEVELOP_TARGET_HOST}:${DEVELOP_FRONTEND_DIR}/
 
 # Ajustar permissões
