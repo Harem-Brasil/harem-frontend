@@ -113,12 +113,13 @@ func InitializeScenario(ctx *godog.ScenarioContext) {
 
 func theAPIIsRunning() error {
 	cfg := application.Config{
-		Port:      "40080",
-		DBURL:     os.Getenv("DATABASE_URL"),
-		RedisURL:  os.Getenv("REDIS_URL"),
-		JWTSecret: "test-jwt-secret-that-is-long-enough-for-tests-32chars",
-		Logger:    slog.New(slog.NewTextHandler(io.Discard, nil)),
-		AppEnv:    "test",
+		Port:                  "40080",
+		DBURL:                 os.Getenv("DATABASE_URL"),
+		RedisURL:              os.Getenv("REDIS_URL"),
+		JWTSecret:             "test-jwt-secret-that-is-long-enough-for-tests-32chars",
+		Logger:                slog.New(slog.NewTextHandler(io.Discard, nil)),
+		AppEnv:                "test",
+		PlatformCommissionBPS: 1500,
 	}
 	if cfg.DBURL == "" {
 		cfg.DBURL = "postgres://harem:harem@localhost:5432/harem?sslmode=disable"
@@ -274,11 +275,21 @@ func iSendARequestTo(method, path string) error {
 func iSendARequestToWithThePayload(method, path string, table *godog.Table) error {
 	var body []byte
 	if table != nil && len(table.Rows) > 1 {
-		data := make(map[string]string)
+		data := make(map[string]any)
 		for i, cell := range table.Rows[1].Cells {
-			if i < len(table.Rows[0].Cells) {
-				data[table.Rows[0].Cells[i].Value] = cell.Value
+			if i >= len(table.Rows[0].Cells) {
+				continue
 			}
+			key := table.Rows[0].Cells[i].Value
+			raw := strings.TrimSpace(cell.Value)
+			if strings.HasPrefix(raw, "[") || strings.HasPrefix(raw, "{") {
+				var parsed any
+				if err := json.Unmarshal([]byte(raw), &parsed); err == nil {
+					data[key] = parsed
+					continue
+				}
+			}
+			data[key] = cell.Value
 		}
 		body, _ = json.Marshal(data)
 	}

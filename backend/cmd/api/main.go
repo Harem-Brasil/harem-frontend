@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -90,9 +91,11 @@ func runServe(logger *slog.Logger, dbURL string) {
 		StripeWebhookSecret:      getEnv("STRIPE_WEBHOOK_SECRET", ""),
 		PagSeguroWebhookSecret:   getEnv("PAGSEGURO_WEBHOOK_SECRET", ""),
 		MercadoPagoWebhookSecret: getEnv("MERCADOPAGO_WEBHOOK_SECRET", ""),
+		InternalBillingSecret:    getEnv("INTERNAL_BILLING_SECRET", ""),
 		AppEnv:                   getEnv("ENV", ""),
 		CommitHash:               getEnv("COMMIT_HASH", ""),
 		OAuthProviders:           oauthProviders,
+		PlatformCommissionBPS:    parseCommissionBPS(getEnv("PLATFORM_COMMISSION_BPS", "")),
 	})
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
@@ -205,6 +208,19 @@ func buildOAuthProviders() map[string]services.OAuthProviderConfig {
 	}
 
 	return providers
+}
+
+// parseCommissionBPS lê PLATFORM_COMMISSION_BPS (0–10000). Valor inválido ou vazio → 1500 (15%).
+func parseCommissionBPS(s string) int {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 1500
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 || n > 10000 {
+		return 1500
+	}
+	return n
 }
 
 // parseCommaSeparatedOrigins divide CORS_ALLOWED_ORIGINS (vírgulas).

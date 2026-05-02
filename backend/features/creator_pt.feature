@@ -11,8 +11,8 @@ Funcionalidade: Endpoints de Criador
   Cenário: Aplicar para se tornar criador
     Dado que eu estou autenticado como usuário "regularuser"
     Quando eu enviar uma requisição POST para "/api/v1/creator/apply" com:
-      | bio                        | social_links                    |
-      | Criador de conteúdo profissional | https://twitter.com/sarah       |
+      | bio                        | social_links                         |
+      | Criador de conteúdo profissional | ["https://twitter.com/sarah"] |
     Então o código de status da resposta deve ser 201
     E a resposta deve conter "id"
     E a resposta deve conter "status" com valor "pending"
@@ -30,12 +30,33 @@ Funcionalidade: Endpoints de Criador
     E a resposta deve conter "earnings"
     E a resposta deve conter "total"
 
+  Cenário: Sumário agregado de ganhos por período
+    Quando eu enviar uma requisição GET para "/api/v1/creator/earnings/summary"
+    Então o código de status da resposta deve ser 200
+    E a resposta deve conter "summaries"
+    E a resposta deve conter "period_from"
+    E a resposta deve conter "platform_commission_basis_points"
+
   Cenário: Obter catálogo do criador
     Quando eu enviar uma requisição GET para "/api/v1/creator/catalog"
     Então o código de status da resposta deve ser 200
     E a resposta deve conter "data"
     E a resposta deve conter "next_cursor"
     E a resposta deve conter "has_more"
+
+  Cenário: Criar item no catálogo
+    Quando eu enviar uma requisição POST para "/api/v1/creator/catalog" com:
+      | title | description | price_cents | currency | visibility |
+      | Pack  | Descrição   | 990         | BRL      | public     |
+    Então o código de status da resposta deve ser 201
+    E a resposta deve conter "id"
+    E a resposta deve conter "price_cents" com valor "990"
+
+  Cenário: Patch de item inexistente devolve 404
+    Quando eu enviar uma requisição PATCH para "/api/v1/creator/catalog/550e8400-e29b-41d4-a716-446655440000" com:
+      | title     |
+      | Qualquer  |
+    Então o código de status da resposta deve ser 404
 
   Cenário: Obter catálogo do criador com paginação
     Quando eu enviar uma requisição GET para "/api/v1/creator/catalog?limit=5&cursor=item-abc"
@@ -57,7 +78,21 @@ Funcionalidade: Endpoints de Criador
     E cada pedido deve conter "status"
     E cada pedido deve conter "amount_cents"
 
+  Cenário: Editar bio do criador
+    Quando eu enviar uma requisição PATCH para "/api/v1/creator/profile" com:
+      | bio                              |
+      | Nova bio do criador para o Harém |
+    Então o código de status da resposta deve ser 200
+    E a resposta deve conter "bio" com valor "Nova bio do criador para o Harém"
+
   Cenário: Apenas criadores podem acessar endpoints de criador
     Dado que eu estou autenticado como usuário "regularuser"
     Quando eu enviar uma requisição GET para "/api/v1/creator/dashboard"
+    Então o código de status da resposta deve ser 403
+
+  Cenário: Usuário comum não pode editar bio pelo endpoint de criador
+    Dado que eu estou autenticado como usuário "regularuser"
+    Quando eu enviar uma requisição PATCH para "/api/v1/creator/profile" com:
+      | bio       |
+      | Tentativa |
     Então o código de status da resposta deve ser 403

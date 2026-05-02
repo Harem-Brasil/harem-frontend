@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -11,6 +12,7 @@ import (
 	"github.com/harem-brasil/backend/internal/controllers"
 	"github.com/harem-brasil/backend/internal/datasources"
 	httpmw "github.com/harem-brasil/backend/internal/middleware"
+	"github.com/harem-brasil/backend/internal/realtime"
 	"github.com/harem-brasil/backend/internal/services"
 )
 
@@ -42,16 +44,19 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 	}
 
 	svc := services.New(services.Dependencies{
-		DB:                       db,
-		Redis:                    rdb,
-		JWTSecret:                []byte(cfg.JWTSecret),
-		Logger:                   cfg.Logger,
-		MaxFileSize:              cfg.MaxFileSize,
-		StripeWebhookSecret:      cfg.StripeWebhookSecret,
-		PagSeguroWebhookSecret:   cfg.PagSeguroWebhookSecret,
-		MercadoPagoWebhookSecret: cfg.MercadoPagoWebhookSecret,
-		AppEnv:                   cfg.AppEnv,
-		OAuthProviders:           cfg.OAuthProviders,
+		DB:                            db,
+		Redis:                         rdb,
+		JWTSecret:                     []byte(cfg.JWTSecret),
+		Logger:                        cfg.Logger,
+		MaxFileSize:                   cfg.MaxFileSize,
+		StripeWebhookSecret:           cfg.StripeWebhookSecret,
+		PagSeguroWebhookSecret:        cfg.PagSeguroWebhookSecret,
+		MercadoPagoWebhookSecret:      cfg.MercadoPagoWebhookSecret,
+		InternalBillingSecret:         cfg.InternalBillingSecret,
+		AppEnv:                        cfg.AppEnv,
+		OAuthProviders:                cfg.OAuthProviders,
+		PlatformCommissionBasisPoints: cfg.PlatformCommissionBPS,
+		RealtimePublisher:             realtime.NoopPublisher{},
 	})
 
 	corsOrigins := cfg.CORSAllowedOrigins
@@ -74,7 +79,14 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 	}))
 	engine.Use(httpmw.GinRateLimit(rdb, cfg.Logger))
 
+	controllers.RegisterDocsRoutes(engine, cfg.Logger)
+
 	engine.Use(func(c *gin.Context) {
+		p := c.Request.URL.Path
+		if p == "/openapi.yaml" || p == "/docs" || strings.HasPrefix(p, "/docs/") {
+			c.Next()
+			return
+		}
 		c.Header("Content-Type", "application/json; charset=utf-8")
 		env := cfg.AppEnv
 		if env == "" {
@@ -89,6 +101,7 @@ func NewHTTPServer(ctx context.Context, cfg Config) (*HTTPServer, error) {
 
 	jwtSecret := []byte(cfg.JWTSecret)
 	controllers.RegisterRoutes(engine, svc, jwtSecret, cfg.Logger, rdb)
+	controllers.CreatorRoutes(engine, svc, jwtSecret, cfg.Logger)
 
 	return &HTTPServer{Engine: engine, Services: svc}, nil
 }

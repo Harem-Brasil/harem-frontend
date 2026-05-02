@@ -28,9 +28,12 @@ type Config struct {
 	StripeWebhookSecret      string
 	PagSeguroWebhookSecret   string
 	MercadoPagoWebhookSecret string
+	InternalBillingSecret    string
 	AppEnv                   string
 	CommitHash               string
 
 	// OAuth provider configs — secrets from env vars, never committed.
 	OAuthProviders map[string]services.OAuthProviderConfig
+
+	PlatformCommissionBPS int
 }

@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 
 	"github.com/google/uuid"
@@ -59,13 +60,15 @@ func (s *Services) CreateSubscription(ctx context.Context, user *middleware.User
 		return nil, domain.Err(500, "Database error")
 	}
 
-	return &domain.Subscription{
+	sub := &domain.Subscription{
 		ID:     subID,
 		UserID: user.UserID,
 		PlanID: plan.ID,
 		Plan:   &plan,
 		Status: "pending_payment",
-	}, nil
+	}
+	s.fanoutSubscriptionUpdated(ctx, user.UserID, nil, subID, "pending_payment")
+	return sub, nil
 }
 
 func (s *Services) GetMySubscription(ctx context.Context, user *middleware.UserClaims) (*domain.Subscription, error) {
@@ -127,30 +130,43 @@ func (s *Services) BillingCheckout(ctx context.Context, user *middleware.UserCla
 }
 
 func (s *Services) CancelSubscription(ctx context.Context, user *middleware.UserClaims) error {
-	_, err := s.DB.Exec(ctx,
-		`UPDATE subscriptions SET status = 'canceled', updated_at = NOW() 
-		 WHERE user_id = $1 AND status = 'active'`,
+	rows, err := s.DB.Query(ctx,
+		`UPDATE subscriptions SET status = 'canceled', updated_at = NOW()
+		 WHERE user_id = $1::uuid AND status = 'active'
+		 RETURNING id::text, creator_id::text`,
 		user.UserID,
 	)
 	if err != nil {
 		return domain.Err(500, "Failed to cancel subscription")
 	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var subID string
+		var cid sql.NullString
+		if err := rows.Scan(&subID, &cid); err != nil {
+			continue
+		}
+		s.fanoutSubscriptionUpdated(ctx, user.UserID, nullableString(cid), subID, "canceled")
+	}
 	return nil
 }
 
 func (s *Services) ResumeSubscription(ctx context.Context, user *middleware.UserClaims, subID string) error {
-	result, err := s.DB.Exec(ctx,
-		`UPDATE subscriptions SET status = 'active', updated_at = NOW() 
-		 WHERE id = $1 AND user_id = $2 AND status = 'canceled'`,
+	var cid sql.NullString
+	err := s.DB.QueryRow(ctx,
+		`UPDATE subscriptions SET status = 'active', updated_at = NOW()
+		 WHERE id = $1::uuid AND user_id = $2::uuid AND status = 'canceled'
+		 RETURNING creator_id::text`,
 		subID, user.UserID,
-	)
+	).Scan(&cid)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return domain.Err(404, "Canceled subscription not found")
+		}
 		return domain.Err(500, "Failed to resume subscription")
 	}
 
-	if result.RowsAffected() == 0 {
-		return domain.Err(404, "Canceled subscription not found")
-	}
-
+	s.fanoutSubscriptionUpdated(ctx, user.UserID, nullableString(cid), subID, "active")
 	return nil
 }

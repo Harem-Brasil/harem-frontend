@@ -114,6 +114,111 @@ paths:
       operationId: refreshToken
       summary: Renovar par de tokens via refresh token opaco
       tags: [Autenticação]
+  /api/v1/creator/earnings/summary:
+    get:
+      operationId: getCreatorEarningsSummary
+      tags: [Criador]
+      security:
+        - bearerAuth: []
+      summary: Sumário agregado de ganhos (catálogo)
+      description: |
+        Agrega valores de pedidos com pagamento confirmado (`paid`, `fulfilled`) por moeda no intervalo `[from, to)` em UTC.
+        A comissão da plataforma aplica-se sobre o bruto (`PLATFORM_COMMISSION_BPS`, predefinição 1500 = 15%).
+        Não devolve compradores nem IDs de pedidos — apenas totais. BOLA: só o criador autenticado acede aos seus dados (`creator_id`).
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 48
+          description: |
+            Limite inferior inclusivo. Data `YYYY-MM-DD` (UTC) ou instante RFC3339.
+            Deve ser enviado em conjunto com `to`, ou ambos omitidos (últimos 30 dias até ao instante atual).
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 48
+          description: |
+            Limite superior exclusivo. Para só data `YYYY-MM-DD`, corresponde ao fim desse dia civil em UTC (implementado como meia-noite do dia seguinte).
+            Para RFC3339, o instante é exclusivo — intervalo semiaberto `[from, to)`.
+      responses:
+        "200":
+          description: Totais por moeda
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorEarningsSummaryResponse"
+              examples:
+                oneCurrency:
+                  summary: Uma moeda
+                  value:
+                    period_from: "2026-04-01T00:00:00Z"
+                    period_to_exclusive: "2026-05-01T00:00:00Z"
+                    platform_commission_basis_points: 1500
+                    summaries:
+                      - currency: BRL
+                        gross_cents: 10000
+                        platform_fee_cents: 1500
+                        net_cents: 8500
+                        paid_orders_count: 3
+        "400":
+          description: Intervalo inválido, mistura from/to, ou período superior a 366 dias
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Não autenticado
+        "403":
+          description: Papel insuficiente (requer creator ou admin)
+
+  /api/v1/creator/catalog:
+    get:
+      operationId: listCreatorCatalog
+      tags: [Criador]
+      security:
+        - bearerAuth: []
+      summary: Listar itens do catálogo do criador autenticado
+      parameters:
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Timestamp RFC3339 copiado de next_cursor da página anterior (paginação por created_at)
+      responses:
+        "200":
+          description: Lista paginada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CursorPageCreatorCatalog"
+              examples:
+                empty:
+                  summary: Sem itens
+                  value:
+                    data: []
+                    has_more: false
+        "400":
+          description: Cursor inválido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Não autenticado
+        "403":
+          description: Papel insuficiente (requer creator ou admin)
+
+    post:
+      operationId: createCreatorCatalogItem
+      tags: [Criador]
+      security:
+        - bearerAuth: []
+      summary: Criar item pago no catálogo (ligado ao perfil do criador)
       requestBody:
         required: true
         content:
@@ -391,12 +496,73 @@ paths:
                 $ref: "#/components/schemas/UserPrivate"
         "400":
           description: JSON inválido ou corpo malformado
+              $ref: "#/components/schemas/CreatorCatalogCreateRequest"
+            examples:
+              pack:
+                summary: Item com mídia
+                value:
+                  title: Pack fotos exclusivas
+                  description: Coleção em alta resolução.
+                  price_cents: 2990
+                  currency: BRL
+                  visibility: subscribers
+                  media:
+                    - https://cdn.example.com/preview1.jpg
+      responses:
+        "201":
+          description: Item criado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorCatalogItem"
+        "400":
+          description: Validação ou JSON inválido
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: JWT ausente ou inválido
+          description: Não autenticado
+        "403":
+          description: Papel insuficiente
+
+  /api/v1/creator/catalog/{item_id}:
+    parameters:
+      - name: item_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: patchCreatorCatalogItem
+      tags: [Criador]
+      security:
+        - bearerAuth: []
+      summary: Atualizar item (whitelist; só dono ou admin)
+      description: |
+        Campos omitidos não são alterados. Outro criador recebe 404 (BOLA).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatorCatalogPatchRequest"
+            examples:
+              price:
+                summary: Só preço
+                value:
+                  price_cents: 3490
+      responses:
+        "200":
+          description: Item atualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorCatalogItem"
+        "400":
+          description: Nenhum campo ou validação falhou
           content:
             application/problem+json:
               schema:
@@ -409,6 +575,30 @@ paths:
                 $ref: "#/components/schemas/ValidationError"
         "429":
           description: Rate limit excedido
+        "401":
+          description: Não autenticado
+        "403":
+          description: Papel insuficiente
+        "404":
+          description: Item inexistente ou não autorizado para este usuário
+
+    delete:
+      operationId: deleteCreatorCatalogItem
+      tags: [Criador]
+      security:
+        - bearerAuth: []
+      summary: Remover item do catálogo (DELETE físico na base de dados)
+      responses:
+        "204":
+          description: Linha removida de creator_catalog
+        "401":
+          description: Não autenticado
+        "403":
+          description: Papel insuficiente
+        "404":
+          description: Item inexistente ou não autorizado
+        "409":
+          description: Item referenciado por pedidos (creator_orders); não pode apagar
           content:
             application/problem+json:
               schema:
@@ -570,6 +760,25 @@ components:
     UserPrivate:
       type: object
       description: Perfil completo do utilizador autenticado (sem campos internos como password_hash)
+    CursorPageCreatorCatalog:
+      type: object
+      additionalProperties: false
+      required: [data, has_more]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorCatalogItem"
+        next_cursor:
+          type: string
+        has_more:
+          type: boolean
+
+    CreatorCatalogItem:
+      type: object
+      additionalProperties: false
+      required:
+        [id, title, description, price_cents, currency, visibility, media, created_at, updated_at]
       properties:
         id:
           type: string
@@ -610,6 +819,31 @@ components:
           format: date-time
         accept_terms_version:
           type: string
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 10000
+        price_cents:
+          type: integer
+          minimum: 0
+          maximum: 999999999
+          description: Preço em cêntimos (inteiro)
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          description: ISO 4217
+          examples: [BRL, USD]
+        visibility:
+          type: string
+          enum: [public, subscribers, premium]
+        media:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 2048
         created_at:
           type: string
           format: date-time
@@ -654,3 +888,121 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
+    CreatorCatalogCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [title, price_cents, currency, visibility]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 10000
+        price_cents:
+          type: integer
+          minimum: 0
+          maximum: 999999999
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 (normalizado para maiúsculas na API)
+        visibility:
+          type: string
+          enum: [public, subscribers, premium]
+        media:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 2048
+
+    CreatorEarningsSummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        [period_from, period_to_exclusive, platform_commission_basis_points, summaries]
+      properties:
+        period_from:
+          type: string
+          format: date-time
+          description: Limite inferior inclusivo aplicado (RFC3339 UTC)
+        period_to_exclusive:
+          type: string
+          format: date-time
+          description: Limite superior exclusivo aplicado (RFC3339 UTC)
+        platform_commission_basis_points:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Comissão da plataforma em basis points (ex. 1500 = 15%)
+        summaries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorEarningsCurrencySummary"
+
+    CreatorEarningsCurrencySummary:
+      type: object
+      additionalProperties: false
+      required:
+        [currency, gross_cents, platform_fee_cents, net_cents, paid_orders_count]
+      properties:
+        currency:
+          type: string
+          pattern: "^[A-Z]{3}$"
+          description: ISO 4217
+        gross_cents:
+          type: integer
+          format: int64
+          minimum: 0
+        platform_fee_cents:
+          type: integer
+          format: int64
+          minimum: 0
+        net_cents:
+          type: integer
+          format: int64
+          minimum: 0
+        paid_orders_count:
+          type: integer
+          format: int64
+          minimum: 0
+
+    CreatorCatalogPatchRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 10000
+        price_cents:
+          type: integer
+          minimum: 0
+          maximum: 999999999
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        visibility:
+          type: string
+          enum: [public, subscribers, premium]
+        media:
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            maxLength: 2048
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT HS256 (issuer harem-api); rotas de criador exigem role creator ou admin.

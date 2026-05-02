@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 
 	"github.com/harem-brasil/backend/internal/domain"
 )
@@ -60,6 +61,7 @@ func (s *Services) WebhookStripe(ctx context.Context, body []byte, sigHeader, st
 		return domain.Err(400, "Invalid JSON")
 	}
 
+	s.logBillingWebhookRealtimeHint("stripe", event)
 	return nil
 }
 
@@ -73,6 +75,7 @@ func (s *Services) WebhookPagSeguro(ctx context.Context, body []byte, sigHeader 
 		return domain.Err(400, "Invalid JSON")
 	}
 
+	s.logBillingWebhookRealtimeHint("pagseguro", event)
 	return nil
 }
 
@@ -86,6 +89,7 @@ func (s *Services) WebhookMercadoPago(ctx context.Context, body []byte, sigHeade
 		return domain.Err(400, "Invalid JSON")
 	}
 
+	s.logBillingWebhookRealtimeHint("mercadopago", event)
 	return nil
 }
 
@@ -120,4 +124,25 @@ func (s *Services) WebhookGeneric(ctx context.Context, provider string, body []b
 		"provider": provider,
 		"event_id": eventID,
 	}, nil
+}
+
+// logBillingWebhookRealtimeHint regista receção de eventos relacionados com subscrição sem payload financeiro.
+// Fan-out subscription.updated ao utilizador correto exige worker que mapeie IDs PSP → BD + hub WS (HB-EPIC-04).
+func (s *Services) logBillingWebhookRealtimeHint(provider string, event map[string]any) {
+	if s.Logger == nil {
+		return
+	}
+	typ, _ := event["type"].(string)
+	if typ == "" {
+		if t2, ok := event["topic"].(string); ok {
+			typ = t2
+		}
+	}
+	if typ == "" || !strings.Contains(strings.ToLower(typ), "subscription") {
+		return
+	}
+	s.Logger.Info("billing webhook subscription-related event; realtime fan-out deferred until HB-EPIC-04 maps PSP ids",
+		"provider", provider,
+		"event_type", typ,
+	)
 }
