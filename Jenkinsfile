@@ -296,21 +296,13 @@ SERVICEFILE
         sh label: 'Upload & install binary (develop)', script: '''
 set -euo pipefail
 BIN_LOCAL="artifacts/harem-api-linux-amd64"
-
-# Criar arquivo .env localmente
 COMMIT=$(git rev-parse --short HEAD)
-printf 'PORT=%s\nENV=develop\nCOMMIT_HASH=%s\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
-  "$DEVELOP_PORT" "$COMMIT" "$DEVELOP_DATABASE_URL" "$DEVELOP_REDIS_URL" "$DEVELOP_JWT_SECRET" "$DEVELOP_STRIPE_SECRET_KEY" > /tmp/harem-api-develop.env
 
-# Upload arquivos para /tmp no target
+# Upload binary e migrations (sem segredos)
 scp "$BIN_LOCAL" ${DEVELOP_TARGET_HOST}:/tmp/harem-api-develop
-scp /tmp/harem-api-develop.env ${DEVELOP_TARGET_HOST}:/tmp/harem-api-develop.env
 scp -r backend/migrations ${DEVELOP_TARGET_HOST}:/tmp/migrations-develop
 
-# Limpar arquivo local temporário
-rm -f /tmp/harem-api-develop.env
-
-# Prepare target and install
+# Prepare target e instalar tudo via SSH (segredos injetados via pipe, sem tocar disco local)
 ssh ${DEVELOP_TARGET_HOST} "
   set -euo pipefail
 
@@ -319,7 +311,8 @@ ssh ${DEVELOP_TARGET_HOST} "
   sudo mv /tmp/harem-api-develop ${DEVELOP_TARGET_DIR}/harem-api
   sudo chmod 0755 ${DEVELOP_TARGET_DIR}/harem-api
 
-  sudo mv /tmp/harem-api-develop.env ${DEVELOP_TARGET_DIR}/.env
+  printf 'PORT=%s\nENV=develop\nCOMMIT_HASH=%s\nDATABASE_URL=%s\nREDIS_URL=%s\nJWT_SECRET=%s\nSTRIPE_SECRET_KEY=%s\n' \
+    '$DEVELOP_PORT' '$COMMIT' '$DEVELOP_DATABASE_URL' '$DEVELOP_REDIS_URL' '$DEVELOP_JWT_SECRET' '$DEVELOP_STRIPE_SECRET_KEY' | sudo tee ${DEVELOP_TARGET_DIR}/.env > /dev/null
   sudo chmod 0600 ${DEVELOP_TARGET_DIR}/.env
 
   sudo rm -rf ${DEVELOP_TARGET_DIR}/migrations
@@ -379,17 +372,15 @@ SERVICEFILE
 set -euo pipefail
 FRONTEND_LOCAL="artifacts/frontend-dist/client"
 
-# Criar diretório no target
-ssh ${DEVELOP_TARGET_HOST} "sudo mkdir -p ${DEVELOP_FRONTEND_DIR}"
-
-# Limpar conteúdo anterior
-ssh ${DEVELOP_TARGET_HOST} "sudo rm -rf ${DEVELOP_FRONTEND_DIR}/*"
-
-# Upload arquivos estáticos (index.html, assets/, etc.)
-scp -r "$FRONTEND_LOCAL"/* ${DEVELOP_TARGET_HOST}:${DEVELOP_FRONTEND_DIR}/
-
-# Ajustar permissões
-ssh ${DEVELOP_TARGET_HOST} "sudo chown -R ${DEVELOP_SERVICE_USER}:${DEVELOP_SERVICE_USER} ${DEVELOP_FRONTEND_DIR}"
+# Upload e extração usando tar para eficiência e preservação de permissões/arquivos ocultos
+tar -C "$FRONTEND_LOCAL" -cz . | ssh ${DEVELOP_TARGET_HOST} "
+  set -euo pipefail
+  sudo mkdir -p ${DEVELOP_FRONTEND_DIR}
+  # Limpar conteúdo anterior de forma segura (incluindo arquivos ocultos)
+  sudo find ${DEVELOP_FRONTEND_DIR} -mindepth 1 -delete
+  sudo tar -C ${DEVELOP_FRONTEND_DIR} -xz
+  sudo chown -R ${DEVELOP_SERVICE_USER}:${DEVELOP_SERVICE_USER} ${DEVELOP_FRONTEND_DIR}
+"
 '''
       }
     }
